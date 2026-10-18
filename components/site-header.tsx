@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Bell, Menu, Plus, Shield, X } from "lucide-react";
 import { useState } from "react";
+import { AuthButton } from "@/components/auth-button";
 
 export function SiteHeader({ active = "catalog" }: { active?: "catalog" | "submit" | "profile" | "admin" }) {
   const [open, setOpen] = useState(false);
@@ -29,10 +30,7 @@ export function SiteHeader({ active = "catalog" }: { active?: "catalog" | "submi
             <span>2</span>
           </Link>
           <Link href="/submit" className="button button-primary compact"><Plus size={17} /> Предложить</Link>
-          <Link href="/profile" className="profile-chip">
-            <span className="avatar avatar-founder">R</span>
-            <span><b>rafchibiskus</b><small>основатель</small></span>
-          </Link>
+          <AuthButton />
           <button className="mobile-menu" onClick={() => setOpen(true)} aria-label="Открыть меню"><Menu /></button>
         </div>
       </div>
