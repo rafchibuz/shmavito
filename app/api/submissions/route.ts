@@ -23,7 +23,14 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
       include: {
         category: { select: { id: true, name: true, slug: true } },
-        listing: { select: { id: true, state: true, publishedAt: true } },
+        listing: {
+          select: {
+            id: true,
+            state: true,
+            publishedAt: true,
+            _count: { select: { likes: true, views: true } },
+          },
+        },
       },
     });
     return Response.json({ submissions });
