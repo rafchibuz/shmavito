@@ -294,11 +294,13 @@ a { color: inherit; text-decoration: none; }
 .admin-shell { display: grid; grid-template-columns: 230px 1fr; min-height: calc(100vh - 76px); }
 .admin-sidebar { position: sticky; top: 76px; height: calc(100vh - 76px); padding: 27px 15px; border-right: 1px solid var(--line); background: #0e1115; display: flex; flex-direction: column; }
 .admin-sidebar > div { margin-bottom: 28px; }
+.admin-nav-groups > div { margin-bottom: 25px; }
 .admin-sidebar div > span { display: block; padding: 0 11px 10px; color: #555e68; font-size: 8px; font-weight: 900; letter-spacing: .15em; }
-.admin-sidebar a { display: flex; align-items: center; gap: 10px; padding: 11px; margin: 2px 0; border-radius: 6px; color: #8e969f; font-size: 11px; cursor: pointer; }
-.admin-sidebar a svg { width: 16px; }
-.admin-sidebar a b { margin-left: auto; min-width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--red); font-size: 8px; }
-.admin-sidebar a.active { color: #fff; background: #20252c; }
+.admin-sidebar button { width: 100%; display: flex; align-items: center; gap: 10px; padding: 11px; margin: 2px 0; border: 0; border-radius: 6px; color: #8e969f; background: transparent; font-size: 11px; text-align: left; cursor: pointer; transition: color .2s ease, background .2s ease; }
+.admin-sidebar button:hover { color: #fff; background: #171b20; }
+.admin-sidebar button svg { width: 16px; }
+.admin-sidebar button b { margin-left: auto; min-width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--red); font-size: 8px; }
+.admin-sidebar button.active { color: #fff; background: #20252c; box-shadow: inset 2px 0 var(--red); }
 .admin-sidebar > small { margin-top: auto; padding: 0 11px; color: #4e5660; font-size: 8px; }
 .admin-main { min-width: 0; padding: 40px clamp(28px,4vw,62px) 80px; }
 .admin-title { display: flex; align-items: center; justify-content: space-between; }
@@ -322,6 +324,43 @@ a { color: inherit; text-decoration: none; }
 .admin-card { border: 1px solid var(--line); border-radius: 9px; background: var(--panel); }
 .admin-card-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 22px; border-bottom: 1px solid var(--line); }
 .admin-card-head h2 { margin: 4px 0 0; font-size: 19px; }
+.admin-workspace { margin-top: 28px; overflow: hidden; }
+.admin-create-row { display: grid; grid-template-columns: minmax(160px,1fr) minmax(160px,1fr) auto; gap: 10px; padding: 18px 22px; border-bottom: 1px solid var(--line); }
+.admin-create-row input, .admin-table-row input, .admin-table-row select, .inline-search, .settings-form input { min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 6px; outline: none; color: #fff; background: #101318; }
+.admin-create-row input:focus, .admin-table-row input:focus, .admin-table-row select:focus, .inline-search:focus-within, .settings-form input:focus { border-color: rgba(237,43,50,.65); }
+.admin-table-row { display: grid; align-items: center; gap: 12px; padding: 13px 22px; border-bottom: 1px solid var(--line); }
+.admin-table-row:last-child { border-bottom: 0; }
+.category-edit-row { grid-template-columns: 24px minmax(150px,1.3fr) minmax(130px,1fr) 84px 92px auto; }
+.category-edit-row > b { color: #555e68; font-family: monospace; font-size: 10px; }
+.short-input { width: 84px; }
+.admin-switch { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; cursor: pointer; }
+.admin-switch input { width: 15px; height: 15px; padding: 0; accent-color: var(--red); }
+.table-action { min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 11px; border: 1px solid var(--line); border-radius: 5px; color: #bbc1c8; background: transparent; font-size: 9px; cursor: pointer; }
+.table-action:hover { color: #fff; border-color: #555e68; }
+.table-action svg { width: 14px; }
+.table-action.danger { color: #ef747b; border-color: rgba(237,43,50,.3); }
+.user-row { grid-template-columns: 38px minmax(140px,1fr) 90px 135px 112px; }
+.user-row .avatar { border-radius: 50%; object-fit: cover; }
+.user-row > div { min-width: 0; display: flex; flex-direction: column; }
+.user-row strong { overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+.user-row small, .user-row > span { color: var(--muted); font-size: 9px; }
+.inline-search { width: min(260px, 42vw); display: flex; align-items: center; gap: 8px; }
+.inline-search svg { width: 15px; color: var(--muted); }
+.inline-search input { width: 100%; height: auto; padding: 0; border: 0; background: transparent; }
+.settings-form { max-width: 620px; margin-top: 28px; padding: 28px; }
+.settings-form h2 { margin: 7px 0 8px; }
+.settings-form > p { max-width: 510px; margin: 0 0 24px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.settings-form .field { max-width: 190px; margin-bottom: 18px; }
+.settings-form input { width: 100%; }
+.comment-moderation-list article { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 18px 22px; border-bottom: 1px solid var(--line); }
+.comment-moderation-list article:last-child { border-bottom: 0; }
+.comment-moderation-list article > div { min-width: 0; }
+.comment-moderation-list strong { font-size: 11px; }
+.comment-moderation-list small { margin-left: 9px; color: #626a74; font-size: 8px; }
+.comment-moderation-list p { margin: 8px 0; color: #c4c9cf; font-size: 11px; line-height: 1.55; }
+.comment-moderation-list span { color: var(--muted); font-size: 9px; }
+.full-audit { padding-top: 10px; }
+.admin-section-actions { display: flex; justify-content: flex-end; padding-top: 14px; }
 .filter-button { display: flex; align-items: center; gap: 7px; padding: 8px 11px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--muted); font-size: 10px; }
 .filter-button svg { width: 15px; }
 .queue-list article { display: grid; grid-template-columns: 92px 54px minmax(0,1fr) auto; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
@@ -330,6 +369,8 @@ a { color: inherit; text-decoration: none; }
 .queue-image img { object-fit: cover; }
 .queue-id { color: #6b737d; font-family: monospace; font-size: 10px; }
 .queue-info > span { color: var(--red); font-size: 8px; text-transform: uppercase; font-weight: 900; }
+.queue-category { max-width: 180px; padding: 2px 22px 2px 0; border: 0; outline: none; color: var(--red); background: transparent; font-size: 8px; font-weight: 900; text-transform: uppercase; cursor: pointer; }
+.queue-category option { color: #fff; background: #171a1f; text-transform: none; }
 .queue-info h3 { margin: 4px 0; font-size: 13px; }
 .queue-info p { margin: 0; color: var(--muted); font-size: 9px; }
 .queue-actions { display: flex; gap: 6px; }
@@ -437,7 +478,13 @@ a { color: inherit; text-decoration: none; }
   .submission-image { height: 58px; }
   .submission-list .status { grid-column: 2; width: max-content; }
   .admin-shell { grid-template-columns: 1fr; }
-  .admin-sidebar { display: none; }
+  .admin-shell { display: block; }
+  .admin-sidebar { position: sticky; z-index: 20; top: 65px; width: 100%; height: auto; padding: 8px 15px; border-right: 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .admin-sidebar > small, .admin-sidebar div > span { display: none; }
+  .admin-nav-groups { display: flex; gap: 5px; margin: 0 !important; width: max-content; }
+  .admin-nav-groups > div { display: flex; gap: 5px; margin: 0; }
+  .admin-sidebar button { width: auto; white-space: nowrap; }
+  .admin-sidebar button.active { box-shadow: inset 0 -2px var(--red); }
   .admin-main { padding: 28px 15px 60px; }
   .admin-title { display: block; }
   .admin-search { min-width: 0; margin-top: 20px; }
@@ -448,6 +495,11 @@ a { color: inherit; text-decoration: none; }
   .queue-id { display: none; }
   .queue-actions { grid-column: 1 / -1; }
   .queue-actions button { flex: 1; justify-content: center; }
+  .admin-create-row { grid-template-columns: 1fr; }
+  .category-edit-row, .user-row { grid-template-columns: 36px minmax(0,1fr); }
+  .category-edit-row > *:not(:first-child), .user-row > *:not(:first-child) { grid-column: 2; width: 100%; }
+  .comment-moderation-list article { flex-direction: column; }
+  .comment-moderation-list .table-action { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
