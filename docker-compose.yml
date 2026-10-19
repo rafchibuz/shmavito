@@ -28,7 +28,8 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
+    profiles: ["storage"]
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: shmavito

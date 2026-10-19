@@ -1,11 +1,11 @@
-export type Category = "Все" | "Автомобили" | "Другая техника" | "Недвижимость" | "Запчасти" | "Разное";
+export type Category = string;
 
 export type Listing = {
   id: string;
   title: string;
   price: string;
   location: string;
-  category: Exclude<Category, "Все">;
+  category: Category;
   description: string;
   image: string;
   author: { name: string; avatar: string };

@@ -19,7 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { categories, initialComments, listings } from "@/lib/demo-data";
+import { categories as demoCategories, initialComments, listings as demoListings } from "@/lib/demo-data";
 import type { Category, CommentItem, Listing } from "@/lib/types";
 
 const VIEWED_KEY = "shmavito.viewed";
@@ -34,6 +34,9 @@ export function CatalogExperience() {
   const [liked, setLiked] = useState<string[]>([]);
   const [selected, setSelected] = useState<Listing | null>(null);
   const [comments, setComments] = useState<Record<string, CommentItem[]>>(initialComments);
+  const [catalogListings, setCatalogListings] = useState<Listing[]>(demoListings);
+  const [catalogCategories, setCatalogCategories] = useState<readonly string[]>(demoCategories);
+  const [catalogMode, setCatalogMode] = useState<"loading" | "live" | "demo">("loading");
 
   useEffect(() => {
     const hydrateLocalState = window.setTimeout(() => {
@@ -43,9 +46,29 @@ export function CatalogExperience() {
     return () => window.clearTimeout(hydrateLocalState);
   }, []);
 
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/listings", { cache: "no-store" }),
+      fetch("/api/categories", { cache: "no-store" }),
+    ])
+      .then(async ([listingResponse, categoryResponse]) => {
+        if (!listingResponse.ok || !categoryResponse.ok) throw new Error("catalog unavailable");
+        const listingPayload = await listingResponse.json() as { listings: Listing[] };
+        const categoryPayload = await categoryResponse.json() as { categories: { name: string }[] };
+        setCatalogCategories(["Все", ...categoryPayload.categories.map((item) => item.name)]);
+        if (listingPayload.listings.length) {
+          setCatalogListings(listingPayload.listings);
+          setCatalogMode("live");
+        } else {
+          setCatalogMode("demo");
+        }
+      })
+      .catch(() => setCatalogMode("demo"));
+  }, []);
+
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    const result = listings.filter((item) => {
+    const result = catalogListings.filter((item) => {
       const categoryMatch = category === "Все" || item.category === category;
       const queryMatch = !normalized || `${item.title} ${item.description} ${item.location}`.toLowerCase().includes(normalized);
       const unseenMatch = !unseenOnly || !viewed.includes(item.id);
@@ -54,10 +77,10 @@ export function CatalogExperience() {
     return result.toSorted((a, b) => {
       if (sort === "popular") return b.likes + Number(liked.includes(b.id)) - (a.likes + Number(liked.includes(a.id)));
       if (sort === "discussed") return b.comments - a.comments;
-      if (sort === "old") return listings.indexOf(b) - listings.indexOf(a);
-      return listings.indexOf(a) - listings.indexOf(b);
+      if (sort === "old") return catalogListings.indexOf(b) - catalogListings.indexOf(a);
+      return catalogListings.indexOf(a) - catalogListings.indexOf(b);
     });
-  }, [category, liked, query, sort, unseenOnly, viewed]);
+  }, [catalogListings, category, liked, query, sort, unseenOnly, viewed]);
 
   function persistViewed(next: string[]) {
     setViewed(next);
@@ -66,11 +89,14 @@ export function CatalogExperience() {
 
   function openListing(item: Listing) {
     if (!viewed.includes(item.id)) persistViewed([...viewed, item.id]);
+    if (catalogMode === "live") {
+      fetch(`/api/listings/${encodeURIComponent(item.id)}/view`, { method: "POST" }).catch(() => undefined);
+    }
     setSelected(item);
   }
 
   function toggleLike(id: string) {
-    const item = listings.find((listing) => listing.id === id);
+    const item = catalogListings.find((listing) => listing.id === id);
     if (!item || item.author.name === "rafchibiskus" || item.unavailable) return;
     const next = liked.includes(id) ? liked.filter((itemId) => itemId !== id) : [...liked, id];
     setLiked(next);
@@ -131,10 +157,10 @@ export function CatalogExperience() {
         </div>
 
         <div className="category-row" aria-label="Категории">
-          {categories.map((item) => <button key={item} className={item === category ? "active" : ""} onClick={() => setCategory(item)}>{item}{item !== "Все" && <small>{listings.filter((listing) => listing.category === item).length}</small>}</button>)}
+          {catalogCategories.map((item) => <button key={item} className={item === category ? "active" : ""} onClick={() => setCategory(item)}>{item}{item !== "Все" && <small>{catalogListings.filter((listing) => listing.category === item).length}</small>}</button>)}
         </div>
 
-        <div className="result-bar"><span>Найдено: <b>{filtered.length}</b></span><span className="demo-badge">ДЕМО-ДАННЫЕ</span></div>
+        <div className="result-bar"><span>Найдено: <b>{filtered.length}</b></span><span className={`demo-badge ${catalogMode === "live" ? "is-live" : ""}`}>{catalogMode === "live" ? "ЖИВОЙ КАТАЛОГ" : catalogMode === "loading" ? "ЗАГРУЗКА" : "ДЕМО ДО ПЕРВОЙ ПУБЛИКАЦИИ"}</span></div>
 
         {filtered.length ? (
           <div className="listing-grid">
