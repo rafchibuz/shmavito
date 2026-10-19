@@ -187,7 +187,7 @@ function ListingCard({ item, viewed, liked, onOpen, onLike }: { item: Listing; v
   return (
     <article className={`listing-card ${viewed ? "is-viewed" : ""} ${item.unavailable ? "is-unavailable" : ""}`}>
       <button className="card-media" onClick={onOpen} aria-label={`Открыть ${item.title}`}>
-        <Image src={item.image} alt="" fill sizes="(max-width: 720px) 100vw, (max-width: 1100px) 50vw, 33vw" />
+        <Image src={item.image} alt="" fill sizes="(max-width: 720px) 100vw, (max-width: 1100px) 50vw, 33vw" unoptimized={item.image.startsWith("https://")} />
         <span className="category-pill">{item.category}</span>
         {item.unavailable && <span className="unavailable-pill">Снято с публикации</span>}
         {viewed && !item.unavailable && <span className="viewed-pill"><Eye size={13} /> Просмотрено</span>}
@@ -224,7 +224,7 @@ function ListingDrawer({ item, liked, comments, onClose, onLike, onComment }: { 
     <div className="drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <aside className="listing-drawer" role="dialog" aria-modal="true" aria-label={item.title}>
         <button className="drawer-close" onClick={onClose} aria-label="Закрыть"><X /></button>
-        <div className="drawer-image"><Image src={item.image} alt="" fill sizes="700px" />{item.unavailable && <div className="drawer-unavailable">Снято с публикации</div>}</div>
+        <div className="drawer-image"><Image src={item.image} alt="" fill sizes="700px" unoptimized={item.image.startsWith("https://")} />{item.unavailable && <div className="drawer-unavailable">Снято с публикации</div>}</div>
         <div className="drawer-body">
           <div className="drawer-meta"><span>{item.category}</span><span><MapPin size={14} /> {item.location}</span><span><Eye size={14} /> {item.views.toLocaleString("ru-RU")}</span></div>
           <h2>{item.title}</h2>

@@ -69,7 +69,7 @@ export async function GET(request: Request) {
         description: listing.description,
         image: listing.images[0]?.storageKey.startsWith("public/")
           ? `/uploads/${listing.images[0].storageKey.slice("public/".length)}`
-          : fallbackImages[listing.category.slug] || "/images/car-lineup.png",
+          : listing.images[0]?.sourceUrl || fallbackImages[listing.category.slug] || "/images/car-lineup.png",
         author: {
           name: listing.submission.author.displayName || listing.submission.author.login,
           avatar: listing.submission.author.avatarUrl || "/images/avatar-blackline.svg",

@@ -5,26 +5,34 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 
 type FormCategory = { id: string; name: string; slug: string };
-const fallbackCategories: FormCategory[] = [
-  { id: "demo-cars", name: "Автомобили", slug: "cars" },
-  { id: "demo-other-vehicles", name: "Другая техника", slug: "other-vehicles" },
-  { id: "demo-real-estate", name: "Недвижимость", slug: "real-estate" },
-  { id: "demo-parts", name: "Запчасти", slug: "parts" },
-  { id: "demo-misc", name: "Разное", slug: "misc" },
-];
+type ImportPayload = {
+  mode: "automatic" | "manual";
+  normalizedUrl: string;
+  title: string;
+  description: string;
+  price: number | null;
+  city: string;
+  imageUrls: string[];
+  importedFields: string[];
+  warning: string | null;
+  message?: string;
+};
 
 export function SubmitForm() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [url, setUrl] = useState("");
   const [category, setCategory] = useState("");
   const [loading, setLoading] = useState(false);
-  const [title, setTitle] = useState("BMW M3 Competition, 2023");
-  const [price, setPrice] = useState("9 850 000");
-  const [city, setCity] = useState("Москва");
-  const [description, setDescription] = useState("Автоматически полученное описание объявления. Проверьте данные перед отправкой.");
+  const [title, setTitle] = useState("");
+  const [price, setPrice] = useState("");
+  const [city, setCity] = useState("");
+  const [description, setDescription] = useState("");
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [importMode, setImportMode] = useState<"automatic" | "manual" | null>(null);
+  const [importWarning, setImportWarning] = useState("");
   const [agreed, setAgreed] = useState(false);
-  const [categories, setCategories] = useState(fallbackCategories);
-  const [demoMode, setDemoMode] = useState(true);
+  const [categories, setCategories] = useState<FormCategory[]>([]);
+  const [categoriesError, setCategoriesError] = useState("");
   const [error, setError] = useState("");
   const [submissionId, setSubmissionId] = useState("1285");
 
@@ -37,19 +45,42 @@ export function SubmitForm() {
       .then((payload) => {
         if (payload.categories.length) {
           setCategories(payload.categories);
-          setDemoMode(false);
+          setCategoriesError("");
         }
       })
-      .catch(() => setDemoMode(true));
+      .catch(() => setCategoriesError("Категории сейчас недоступны. Обновите страницу после запуска базы данных."));
   }, []);
 
   const validUrl = /^https:\/\/(www\.)?avito\.ru\//i.test(url);
 
-  function importListing(event: FormEvent) {
+  async function importListing(event: FormEvent) {
     event.preventDefault();
     if (!validUrl || !category) return;
     setLoading(true);
-    window.setTimeout(() => { setLoading(false); setStep(2); }, 900);
+    setError("");
+    setImportWarning("");
+    try {
+      const response = await fetch("/api/import/avito", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceUrl: url }),
+      });
+      const payload = await response.json() as ImportPayload;
+      if (!response.ok) throw new Error(payload.message || "Не удалось прочитать объявление.");
+      setUrl(payload.normalizedUrl);
+      setTitle(payload.title);
+      setDescription(payload.description);
+      setPrice(payload.price === null ? "" : payload.price.toLocaleString("ru-RU"));
+      setCity(payload.city);
+      setImageUrls(payload.imageUrls);
+      setImportMode(payload.mode);
+      setImportWarning(payload.warning || "");
+      setStep(2);
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : "Не удалось прочитать объявление.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (step === 3) {
@@ -76,7 +107,9 @@ export function SubmitForm() {
             <p className="lead">Вставьте ссылку на объявление Avito. Мы попробуем забрать фото, название, цену и описание автоматически.</p>
             <label className="field"><span>Ссылка на Avito</span><div className={`field-input ${url && !validUrl ? "invalid" : ""}`}><Link2 size={19} /><input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://www.avito.ru/..." autoFocus /></div>{url && !validUrl && <small>Нужна полная HTTPS-ссылка на avito.ru</small>}</label>
             <label className="field"><span>Категория <b>*</b></span><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="">Выберите категорию</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><small>Без категории предложение отправить нельзя. Модератор сможет исправить выбор.</small></label>
+            {categoriesError && <div className="info-box form-error"><ShieldCheck size={20} /><div><strong>Категории не загрузились</strong><p>{categoriesError}</p></div></div>}
             <div className="info-box"><Sparkles size={20} /><div><strong>Автоматический импорт</strong><p>Если Avito не отдаст данные, откроется ручная форма. Ссылка и выбранная категория сохранятся.</p></div></div>
+            {error && <div className="info-box form-error"><ShieldCheck size={20} /><div><strong>Не удалось продолжить</strong><p>{error}</p></div></div>}
             <button className="button button-primary form-submit" disabled={!validUrl || !category || loading}>{loading ? <><LoaderCircle className="spin" size={18} /> Получаем данные…</> : <>Продолжить <ArrowRight size={18} /></>}</button>
           </form>
         ) : (
@@ -84,7 +117,6 @@ export function SubmitForm() {
             event.preventDefault();
             if (!agreed || loading) return;
             setError("");
-            if (demoMode) { setStep(3); return; }
             setLoading(true);
             try {
               const response = await fetch("/api/submissions", {
@@ -97,6 +129,7 @@ export function SubmitForm() {
                   description,
                   price: Number(price.replace(/\D/g, "")) || null,
                   city,
+                  imageUrls,
                 }),
               });
               const payload = await response.json() as { submission?: { id: string }; message?: string };
@@ -112,12 +145,13 @@ export function SubmitForm() {
             <button type="button" className="back-link" onClick={() => setStep(1)}><ArrowLeft size={16} /> Изменить ссылку</button>
             <span className="section-kicker">ПРОВЕРЬТЕ ДАННЫЕ</span>
             <h1>Всё выглядит правильно?</h1>
-            <p className="lead">Это демонстрация результата импорта. Перед отправкой можно исправить любое поле.</p>
-            <div className="import-preview"><div className="upload-placeholder"><ImagePlus /><span>Обложка объявления</span><small>До 5 изображений</small></div><div className="preview-fields"><label className="field"><span>Название</span><input value={title} onChange={(event) => setTitle(event.target.value)} /></label><div className="field-pair"><label className="field"><span>Цена, ₽</span><input value={price} onChange={(event) => setPrice(event.target.value)} /></label><label className="field"><span>Город</span><input value={city} onChange={(event) => setCity(event.target.value)} /></label></div></div></div>
+            <p className="lead">{importMode === "automatic" ? "Мы получили доступные данные объявления. Проверьте их перед отправкой." : "Автоматический доступ ограничен. Заполните основные данные вручную."}</p>
+            {importWarning && <div className="info-box import-warning"><Sparkles size={20} /><div><strong>{importMode === "automatic" ? "Импорт выполнен частично" : "Ручной режим"}</strong><p>{importWarning}</p></div></div>}
+            <div className="import-preview"><div className={`upload-placeholder ${imageUrls[0] ? "has-image" : ""}`} style={imageUrls[0] ? { backgroundImage: `linear-gradient(rgba(8,10,13,.08),rgba(8,10,13,.5)), url(${JSON.stringify(imageUrls[0]).slice(1, -1)})` } : undefined}>{!imageUrls[0] && <ImagePlus />}<span>{imageUrls[0] ? "Фото с Avito" : "Фото не получено"}</span><small>{imageUrls.length ? `${imageUrls.length} фото импортировано` : "Модератор увидит ссылку"}</small></div><div className="preview-fields"><label className="field"><span>Название <b>*</b></span><input required minLength={2} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Название объявления" /></label><div className="field-pair"><label className="field"><span>Цена, ₽</span><input inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="Не указана" /></label><label className="field"><span>Город</span><input value={city} onChange={(event) => setCity(event.target.value)} placeholder="Не указан" /></label></div></div></div>
             <label className="field"><span>Описание</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={5} /></label>
             <label className="rules-check"><input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} /><span><Check size={14} /></span><p>Я подтверждаю, что предложение не нарушает правила, не содержит запрещённых товаров и персональных данных.</p></label>
             {error && <div className="info-box form-error"><ShieldCheck size={20} /><div><strong>Не удалось отправить</strong><p>{error}</p></div></div>}
-            <button className="button button-primary form-submit" disabled={!agreed || loading}>{loading ? <><LoaderCircle className="spin" size={18} /> Отправляем…</> : <>Отправить на модерацию <ArrowRight size={18} /></>}</button>
+            <button className="button button-primary form-submit" disabled={!agreed || !title.trim() || loading}>{loading ? <><LoaderCircle className="spin" size={18} /> Отправляем…</> : <>Отправить на модерацию <ArrowRight size={18} /></>}</button>
           </form>
         )}
       </section>

@@ -234,6 +234,12 @@ a { color: inherit; text-decoration: none; }
 .upload-placeholder { min-height: 195px; display: grid; place-content: center; justify-items: center; gap: 6px; border: 1px dashed #4a515a; border-radius: 7px; color: var(--muted); background: #101318; font-size: 10px; }
 .upload-placeholder svg { color: var(--red); }
 .upload-placeholder small { color: #626a74; }
+.upload-placeholder.has-image { position: relative; place-content: end start; padding: 14px; overflow: hidden; border-style: solid; border-color: #343a42; color: #fff; background-position: center; background-size: cover; }
+.upload-placeholder.has-image::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); pointer-events: none; }
+.upload-placeholder.has-image span, .upload-placeholder.has-image small { position: relative; z-index: 1; text-shadow: 0 1px 8px #000; }
+.upload-placeholder.has-image small { color: #d7dadd; }
+.import-warning { margin-top: 18px; border-color: rgba(232,165,55,.3); background: rgba(232,165,55,.08); }
+.import-warning svg { color: var(--amber); }
 .preview-fields .field { margin-top: 0; }
 .field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .field-pair .field { margin-top: 14px; }
