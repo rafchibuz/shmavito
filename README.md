@@ -85,6 +85,8 @@ pnpm test:smoke
 $env:SMOKE_AVITO_IMPORT="1"; pnpm test:smoke; Remove-Item Env:SMOKE_AVITO_IMPORT
 ```
 
+Конкретную ссылку можно передать через переменную `SMOKE_AVITO_URL`.
+
 ## Текущий этап
 
 Идёт этап 4 из 6: личный кабинет и функции сообщества. Сервер сначала извлекает JSON-LD и Open Graph, а при блокировке прямого запроса использует резервное чтение публичной страницы. Ручной режим остаётся последним безопасным вариантом. Подробный статус находится в [`docs/DEVELOPMENT_PLAN.md`](docs/DEVELOPMENT_PLAN.md).

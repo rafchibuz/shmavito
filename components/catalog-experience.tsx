@@ -54,7 +54,6 @@ export function CatalogExperience() {
   const [catalogCategories, setCatalogCategories] = useState<readonly string[]>(demoCategories);
   const [catalogMode, setCatalogMode] = useState<"loading" | "live" | "demo">("loading");
   const [viewer, setViewer] = useState<CatalogViewer | null>(null);
-  const [portraitOpen, setPortraitOpen] = useState(false);
 
   useEffect(() => {
     const hydrateLocalState = window.setTimeout(() => {
@@ -212,10 +211,10 @@ export function CatalogExperience() {
             <div><strong>26 910</strong><span>переходов</span></div>
           </div>
         </div>
-        <button type="button" className="steel-card" onClick={() => setPortraitOpen(true)} aria-label="Увеличить фотографию STEEL">
+        <a className="steel-card" href="https://www.twitch.tv/steel" target="_blank" rel="noreferrer" aria-label="Открыть Twitch-канал STEEL">
           <Image src="/images/steel-portrait.png" alt="STEEL" fill sizes="340px" loading="eager" />
           <div><span>CURATED BY</span><strong>STEEL</strong><small>twitch.tv/steel</small></div>
-        </button>
+        </a>
       </section>
 
       <main className="catalog-section shell" id="catalog">
@@ -255,7 +254,6 @@ export function CatalogExperience() {
       </section>
 
       {selected && <ListingDrawer item={selected} liked={liked.includes(selected.id)} own={catalogMode === "live" ? selected.author.id === viewer?.id : selected.author.name === "rafchibiskus"} viewerAvatar={viewer?.avatarUrl || null} comments={comments[selected.id] || []} onClose={() => setSelected(null)} onLike={() => toggleLike(selected.id)} onComment={(text, parent) => addComment(selected.id, text, parent)} onReport={reportTarget} />}
-      {portraitOpen && <div className="portrait-lightbox" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPortraitOpen(false); }}><div role="dialog" aria-modal="true" aria-label="Фотография STEEL"><button onClick={() => setPortraitOpen(false)} aria-label="Закрыть"><X /></button><Image src="/images/steel-portrait.png" alt="STEEL" fill sizes="(max-width: 720px) 94vw, 620px" /></div></div>}
     </>
   );
 }

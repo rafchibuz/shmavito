@@ -149,10 +149,11 @@ async function main() {
   invariant(authenticatedCatalog.viewer?.id === viewer.id, "Authenticated viewer was not returned");
 
   if (process.env.SMOKE_AVITO_IMPORT === "1") {
+    const avitoSmokeUrl = process.env.SMOKE_AVITO_URL || listing.sourceUrl;
     const imported = await request("/api/import/avito", {
       token: viewerToken,
       method: "POST",
-      body: { sourceUrl: listing.sourceUrl },
+      body: { sourceUrl: avitoSmokeUrl },
     });
     invariant(imported.mode === "automatic", `Avito import did not finish automatically: ${JSON.stringify(imported)}`);
     invariant(imported.title && imported.description, "Avito import missed title or description");

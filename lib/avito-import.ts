@@ -224,20 +224,29 @@ function parseReaderMarkdown(markdown: string, normalizedUrl: string): AvitoImpo
 }
 
 async function importThroughReader(normalizedUrl: string, fallbackWarning: string) {
-  try {
-    const target = new URL(normalizedUrl);
-    const readerTarget = `http://www.avito.ru${target.pathname}${target.search}`;
-    const response = await fetch(`https://r.jina.ai/${readerTarget}`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(READER_TIMEOUT_MS),
-      headers: { Accept: "text/plain" },
-    });
-    if (!response.ok) return manualResult(normalizedUrl, fallbackWarning);
-    const parsed = parseReaderMarkdown(await readLimitedText(response), normalizedUrl);
-    return parsed ?? manualResult(normalizedUrl, fallbackWarning);
-  } catch {
-    return manualResult(normalizedUrl, fallbackWarning);
+  const target = new URL(normalizedUrl);
+  const targets = [
+    `https://m.avito.ru${target.pathname}${target.search}`,
+    `http://www.avito.ru${target.pathname}${target.search}`,
+    `https://www.avito.ru${target.pathname}${target.search}`,
+  ];
+
+  for (const readerTarget of targets) {
+    try {
+      const response = await fetch(`https://r.jina.ai/${readerTarget}`, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(READER_TIMEOUT_MS),
+        headers: { Accept: "text/plain" },
+      });
+      if (!response.ok) continue;
+      const parsed = parseReaderMarkdown(await readLimitedText(response), normalizedUrl);
+      if (parsed) return parsed;
+    } catch {
+      // Try the next canonical Avito host: anti-bot rules differ between web and mobile pages.
+    }
   }
+
+  return manualResult(normalizedUrl, fallbackWarning);
 }
 
 export async function importAvitoListing(sourceUrl: string): Promise<AvitoImportResult> {
