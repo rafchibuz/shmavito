@@ -8,7 +8,7 @@ export type Listing = {
   category: Category;
   description: string;
   image: string;
-  author: { name: string; avatar: string };
+  author: { id?: string; name: string; avatar: string };
   published: string;
   likes: number;
   comments: number;
@@ -21,6 +21,7 @@ export type Listing = {
 
 export type CommentItem = {
   id: string;
+  authorId?: string;
   author: string;
   avatar: string;
   text: string;

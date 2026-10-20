@@ -178,6 +178,8 @@ a { color: inherit; text-decoration: none; }
 .comment small { color: var(--muted); font-size: 9px; }
 .comment p { margin: 5px 0 6px; color: #c7cbd0; font-size: 12px; line-height: 1.5; }
 .comment button { padding: 0; border: 0; color: var(--muted); background: transparent; font-size: 9px; cursor: pointer; }
+.comment-actions { display: flex !important; justify-content: flex-start !important; gap: 14px; }
+.comment-actions button { display: inline-flex; align-items: center; gap: 4px; }
 .muted { color: var(--muted); }
 .comment-form { margin-top: 16px; }
 .comment-form > div:last-child { display: flex; align-items: flex-start; gap: 9px; }
@@ -186,6 +188,15 @@ a { color: inherit; text-decoration: none; }
 .comment-form button:disabled { opacity: .4; }
 .reply-banner { display: flex; justify-content: space-between; padding: 8px 12px; margin: 0 0 8px 41px; color: #bbc0c6; background: #20252c; border-radius: 5px; font-size: 10px; }
 .reply-banner button { width: auto !important; height: auto !important; background: transparent !important; }
+.comment-error { display: block; margin-top: 7px; color: #ef747b; font-size: 9px; }
+.drawer-report-layer { position: absolute; z-index: 5; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(4,5,7,.8); backdrop-filter: blur(7px); }
+.drawer-report { position: relative; width: min(440px,100%); padding: 28px; border: 1px solid var(--line); border-radius: 10px; background: #111419; box-shadow: 0 24px 70px rgba(0,0,0,.55); }
+.drawer-report h3 { margin: 8px 35px 6px 0; font-size: 21px; }
+.drawer-report > p { margin: 0 0 18px; color: var(--muted); font-size: 10px; }
+.drawer-report textarea { width: 100%; padding: 12px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; outline: none; color: #fff; background: #0b0d11; }
+.drawer-report textarea:focus { border-color: rgba(237,43,50,.55); }
+.drawer-report > small { display: block; margin-top: 7px; color: #ef747b; }
+.drawer-report > div { display: flex; justify-content: flex-end; gap: 9px; margin-top: 16px; }
 .comments-locked { margin-top: 18px; padding: 15px; color: var(--muted); background: #1b1f24; border-radius: 6px; font-size: 11px; text-align: center; }
 
 .interior { padding-top: 76px; background: radial-gradient(circle at 80% 10%, rgba(237,43,50,.08), transparent 28%), var(--ink); }
@@ -381,6 +392,15 @@ a { color: inherit; text-decoration: none; }
 .comment-moderation-list small { margin-left: 9px; color: #626a74; font-size: 8px; }
 .comment-moderation-list p { margin: 8px 0; color: #c4c9cf; font-size: 11px; line-height: 1.55; }
 .comment-moderation-list span { color: var(--muted); font-size: 9px; }
+.report-list article { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; padding: 20px 22px; border-bottom: 1px solid var(--line); }
+.report-list article:last-child { border-bottom: 0; }
+.report-list article > div:first-child { min-width: 0; }
+.report-list article > div:first-child > span { color: var(--red); font-size: 8px; font-weight: 900; letter-spacing: .08em; }
+.report-list h3 { margin: 5px 0; font-size: 14px; }
+.report-list p { margin: 8px 0; color: #c7cbd0; font-size: 11px; line-height: 1.5; }
+.report-list small { color: var(--muted); font-size: 8px; }
+.report-list blockquote { margin: 12px 0 0; padding: 10px 12px; border-left: 2px solid #424952; color: #8e969f; background: #101318; font-size: 10px; }
+.report-list article > div:last-child { display: flex; flex: 0 0 auto; gap: 7px; }
 .full-audit { padding-top: 10px; }
 .admin-section-actions { display: flex; justify-content: flex-end; padding-top: 14px; }
 .filter-button { display: flex; align-items: center; gap: 7px; padding: 8px 11px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--muted); font-size: 10px; }
@@ -522,6 +542,9 @@ a { color: inherit; text-decoration: none; }
   .category-edit-row > *:not(:first-child), .user-row > *:not(:first-child) { grid-column: 2; width: 100%; }
   .comment-moderation-list article { flex-direction: column; }
   .comment-moderation-list .table-action { width: 100%; }
+  .report-list article { flex-direction: column; }
+  .report-list article > div:last-child { width: 100%; }
+  .report-list article > div:last-child .table-action { flex: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

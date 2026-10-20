@@ -1,4 +1,5 @@
 import { ListingState } from "@prisma/client";
+import { getSessionUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { apiErrorResponse } from "@/lib/http";
 
@@ -25,6 +26,7 @@ function formatPublished(value: Date) {
 
 export async function GET(request: Request) {
   try {
+    const user = await getSessionUser();
     const url = new URL(request.url);
     const category = url.searchParams.get("category")?.trim();
     const query = url.searchParams.get("q")?.trim().slice(0, 100);
@@ -50,6 +52,7 @@ export async function GET(request: Request) {
         submission: {
           select: {
             sourceUrl: true,
+            authorId: true,
             author: { select: { login: true, displayName: true, avatarUrl: true } },
           },
         },
@@ -57,6 +60,12 @@ export async function GET(request: Request) {
         _count: { select: { likes: true, comments: true, views: true } },
       },
     });
+
+    const listingIds = listings.map((listing) => listing.id);
+    const [viewerLikes, viewerViews] = user && listingIds.length ? await Promise.all([
+      db.like.findMany({ where: { userId: user.id, listingId: { in: listingIds } }, select: { listingId: true } }),
+      db.itemView.findMany({ where: { userId: user.id, listingId: { in: listingIds } }, select: { listingId: true } }),
+    ]) : [[], []];
 
     return Response.json({
       listings: listings.map((listing) => ({
@@ -71,6 +80,7 @@ export async function GET(request: Request) {
           ? `/uploads/${listing.images[0].storageKey.slice("public/".length)}`
           : listing.images[0]?.sourceUrl || fallbackImages[listing.category.slug] || "/images/car-lineup.png",
         author: {
+          id: listing.submission.authorId,
           name: listing.submission.author.displayName || listing.submission.author.login,
           avatar: listing.submission.author.avatarUrl || "/images/avatar-blackline.svg",
         },
@@ -84,6 +94,14 @@ export async function GET(request: Request) {
         sourceUrl: listing.submission.sourceUrl,
       })),
       total: listings.length,
+      viewer: user ? {
+        id: user.id,
+        login: user.login,
+        displayName: user.displayName,
+        avatarUrl: user.avatarUrl,
+        likedIds: viewerLikes.map((like) => like.listingId),
+        viewedIds: viewerViews.map((view) => view.listingId),
+      } : null,
     });
   } catch (error) {
     return apiErrorResponse(error);

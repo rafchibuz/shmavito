@@ -28,6 +28,7 @@ type ApiCategory = { id: string; name: string; slug: string; position: number; i
 type ApiUser = { id: string; login: string; displayName: string; avatarUrl: string | null; role: "USER" | "MODERATOR" | "FOUNDER"; status: "ACTIVE" | "BLOCKED"; createdAt: string; _count: { submissions: number; comments: number } };
 type AuditItem = { id: string; action: string; targetType: string; targetId: string; createdAt: string; actor: { login: string; displayName: string } | null };
 type ApiComment = { id: string; body: string; createdAt: string; author: { login: string; displayName: string; avatarUrl: string | null }; listing: { id: string; title: string } };
+type ApiReport = { id: string; reason: string; status: "OPEN" | "RESOLVED" | "DISMISSED"; createdAt: string; reporter: { login: string; displayName: string; avatarUrl: string | null }; listing: { id: string; title: string } | null; comment: { id: string; body: string; listing: { id: string; title: string } } | null };
 
 const sectionMeta: Record<Section, { kicker: string; title: string; description: string }> = {
   overview: { kicker: "ПАНЕЛЬ УПРАВЛЕНИЯ", title: "Добрый вечер, Раф", description: "Вот что происходит в ШМАВИТО прямо сейчас." },
@@ -66,6 +67,7 @@ export function AdminDashboard() {
   const [section, setSection] = useState<Section>("overview");
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [queueMode, setQueueMode] = useState<"loading" | "live" | "auth" | "error">("loading");
+  const [reportCount, setReportCount] = useState(0);
   const [toast, setToast] = useState("");
   const meta = sectionMeta[section];
 
@@ -104,12 +106,18 @@ export function AdminDashboard() {
     return () => window.clearTimeout(timer);
   }, [loadQueue]);
 
+  useEffect(() => {
+    api<{ reports: ApiReport[] }>("/api/admin/reports?status=OPEN")
+      .then((value) => setReportCount(value.reports.length))
+      .catch(() => undefined);
+  }, []);
+
   return (
     <div className="site-page interior admin-screen">
       <SiteHeader active="admin" />
       <div className="admin-shell">
         <aside className="admin-sidebar">
-          <AdminNav section={section} queueCount={queue.length} onSelect={setSection} />
+          <AdminNav section={section} queueCount={queue.length} reportCount={reportCount} onSelect={setSection} />
           <small>{queueMode === "live" ? "DATABASE CONNECTED" : "LOCAL MODE"} • v0.3.0</small>
         </aside>
         <main className="admin-main">
@@ -118,11 +126,11 @@ export function AdminDashboard() {
             <div className="admin-search"><Search /><input placeholder="Поиск по панели" /><kbd>⌘ K</kbd></div>
           </div>
 
-          {section === "overview" && <Overview queue={queue} queueMode={queueMode} notify={notify} onQueueChange={setQueue} onOpenQueue={() => setSection("moderation")} />}
+          {section === "overview" && <Overview queue={queue} queueMode={queueMode} reportCount={reportCount} notify={notify} onQueueChange={setQueue} onOpenQueue={() => setSection("moderation")} />}
           {section === "moderation" && <QueuePanel queue={queue} mode={queueMode} notify={notify} onQueueChange={setQueue} />}
           {section === "categories" && <CategoriesPanel notify={notify} />}
           {section === "comments" && <CommentsPanel notify={notify} />}
-          {section === "reports" && <ReportsPanel />}
+          {section === "reports" && <ReportsPanel notify={notify} onCountChange={setReportCount} />}
           {section === "users" && <UsersPanel notify={notify} />}
           {section === "audit" && <AuditPanel />}
           {section === "settings" && <SettingsPanel notify={notify} />}
@@ -133,13 +141,13 @@ export function AdminDashboard() {
   );
 }
 
-function AdminNav({ section, queueCount, onSelect }: { section: Section; queueCount: number; onSelect: (section: Section) => void }) {
+function AdminNav({ section, queueCount, reportCount, onSelect }: { section: Section; queueCount: number; reportCount: number; onSelect: (section: Section) => void }) {
   const item = (id: Section, icon: ReactNode, label: string, count?: number) => <button className={section === id ? "active" : ""} onClick={() => onSelect(id)}>{icon}{label}{count !== undefined && <b>{count}</b>}</button>;
-  return <div className="admin-nav-groups"><div><span>УПРАВЛЕНИЕ</span>{item("overview", <LayoutDashboard />, "Обзор")}{item("moderation", <FileClock />, "Модерация", queueCount)}{item("categories", <Tags />, "Категории")}{item("comments", <MessageSquare />, "Комментарии")}{item("reports", <Flag />, "Жалобы", 0)}</div><div><span>СИСТЕМА</span>{item("users", <Users />, "Пользователи")}{item("audit", <Shield />, "Журнал действий")}{item("settings", <Settings />, "Настройки")}</div></div>;
+  return <div className="admin-nav-groups"><div><span>УПРАВЛЕНИЕ</span>{item("overview", <LayoutDashboard />, "Обзор")}{item("moderation", <FileClock />, "Модерация", queueCount)}{item("categories", <Tags />, "Категории")}{item("comments", <MessageSquare />, "Комментарии")}{item("reports", <Flag />, "Жалобы", reportCount)}</div><div><span>СИСТЕМА</span>{item("users", <Users />, "Пользователи")}{item("audit", <Shield />, "Журнал действий")}{item("settings", <Settings />, "Настройки")}</div></div>;
 }
 
-function Overview({ queue, queueMode, notify, onQueueChange, onOpenQueue }: { queue: QueueItem[]; queueMode: "loading" | "live" | "auth" | "error"; notify: (message: string) => void; onQueueChange: (items: QueueItem[]) => void; onOpenQueue: () => void }) {
-  return <><div className="admin-metrics"><Metric icon={<Clock3 />} value={queue.length.toString()} label="ждут проверки" detail="живая очередь" accent="amber" /><Metric icon={<Eye />} value="—" label="опубликовано" detail="из базы каталога" accent="green" /><Metric icon={<Flag />} value="0" label="новые жалобы" detail="очередь чиста" accent="red" /><Metric icon={<CircleAlert />} value="0" label="ошибок проверки" detail="за последние сутки" accent="blue" /></div><QueuePanel queue={queue} displayLimit={5} mode={queueMode} notify={notify} onQueueChange={onQueueChange} /><div className="admin-section-actions"><button className="button button-ghost" onClick={onOpenQueue}>Открыть всю модерацию</button></div></>;
+function Overview({ queue, queueMode, reportCount, notify, onQueueChange, onOpenQueue }: { queue: QueueItem[]; queueMode: "loading" | "live" | "auth" | "error"; reportCount: number; notify: (message: string) => void; onQueueChange: (items: QueueItem[]) => void; onOpenQueue: () => void }) {
+  return <><div className="admin-metrics"><Metric icon={<Clock3 />} value={queue.length.toString()} label="ждут проверки" detail="живая очередь" accent="amber" /><Metric icon={<Eye />} value="—" label="опубликовано" detail="из базы каталога" accent="green" /><Metric icon={<Flag />} value={reportCount.toString()} label="новые жалобы" detail={reportCount ? "нужна проверка" : "очередь чиста"} accent="red" /><Metric icon={<CircleAlert />} value="0" label="ошибок проверки" detail="за последние сутки" accent="blue" /></div><QueuePanel queue={queue} displayLimit={5} mode={queueMode} notify={notify} onQueueChange={onQueueChange} /><div className="admin-section-actions"><button className="button button-ghost" onClick={onOpenQueue}>Открыть всю модерацию</button></div></>;
 }
 
 function QueuePanel({ queue, mode, notify, onQueueChange, displayLimit }: { queue: QueueItem[]; mode: "loading" | "live" | "auth" | "error"; notify: (message: string) => void; onQueueChange: (items: QueueItem[]) => void; displayLimit?: number }) {
@@ -207,6 +215,21 @@ function CommentsPanel({ notify }: { notify: (message: string) => void }) {
   return <section className="admin-card admin-workspace"><div className="admin-card-head"><div><span className="section-kicker">{comments.length} КОММЕНТАРИЕВ</span><h2>Последние обсуждения</h2></div></div>{comments.length ? <div className="comment-moderation-list">{comments.map((comment) => <article key={comment.id}><div><strong>{comment.author.displayName || comment.author.login}</strong><small>{new Date(comment.createdAt).toLocaleString("ru-RU")}</small><p>{comment.body}</p><span>в «{comment.listing.title}»</span></div><button className="table-action danger" onClick={() => remove(comment.id)}><Trash2 /> Удалить</button></article>)}</div> : <AdminEmpty icon={<MessageSquare />} title="Комментариев пока нет" text="Новые обсуждения появятся здесь." />}</section>;
 }
 
-function ReportsPanel() { return <section className="admin-card"><AdminEmpty icon={<Flag />} title="Жалоб пока нет" text="Раздел уже готов к очереди жалоб на объявления и комментарии." /></section>; }
+function ReportsPanel({ notify, onCountChange }: { notify: (message: string) => void; onCountChange: (count: number) => void }) {
+  const [reports, setReports] = useState<ApiReport[]>([]);
+  useEffect(() => {
+    api<{ reports: ApiReport[] }>("/api/admin/reports?status=OPEN")
+      .then((value) => { setReports(value.reports); onCountChange(value.reports.length); })
+      .catch((error) => notify(error.message));
+  }, [notify, onCountChange]);
+  async function decide(report: ApiReport, status: "RESOLVED" | "DISMISSED") {
+    try {
+      await api(`/api/admin/reports/${report.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+      setReports((items) => { const next = items.filter((item) => item.id !== report.id); onCountChange(next.length); return next; });
+      notify(status === "RESOLVED" ? "Жалоба обработана" : "Жалоба отклонена");
+    } catch (error) { notify(error instanceof Error ? error.message : "Ошибка"); }
+  }
+  return <section className="admin-card admin-workspace"><div className="admin-card-head"><div><span className="section-kicker">{reports.length} ОТКРЫТЫХ</span><h2>Очередь жалоб</h2></div></div>{reports.length ? <div className="report-list">{reports.map((report) => <article key={report.id}><div><span>{report.comment ? "КОММЕНТАРИЙ" : "ОБЪЯВЛЕНИЕ"}</span><h3>{report.listing?.title || report.comment?.listing.title || "Удалённый материал"}</h3><p>{report.reason}</p><small>от @{report.reporter.login} • {new Date(report.createdAt).toLocaleString("ru-RU")}</small>{report.comment && <blockquote>{report.comment.body}</blockquote>}</div><div><button className="table-action" onClick={() => decide(report, "DISMISSED")}>Отклонить</button><button className="table-action danger" onClick={() => decide(report, "RESOLVED")}><Check /> Обработано</button></div></article>)}</div> : <AdminEmpty icon={<Flag />} title="Жалоб пока нет" text="Новые сигналы на объявления и комментарии появятся здесь." />}</section>;
+}
 function AdminEmpty({ icon, title, text, action }: { icon: ReactNode; title: string; text: string; action?: ReactNode }) { return <div className="queue-empty">{icon}<h3>{title}</h3><p>{text}</p>{action}</div>; }
 function Metric({ icon, value, label, detail, accent }: { icon: ReactNode; value: string; label: string; detail: string; accent: string }) { return <div className={`metric ${accent}`}><span>{icon}</span><div><strong>{value}</strong><p>{label}</p><small>{detail}</small></div></div>; }
