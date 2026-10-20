@@ -13,6 +13,7 @@ const submissionSchema = z.object({
   price: z.number().int().nonnegative().max(2_000_000_000).nullable().optional(),
   city: z.string().trim().max(100).optional(),
   imageUrls: z.array(z.url()).max(5).optional(),
+  importMode: z.enum(["automatic", "manual"]).nullable().optional(),
 });
 
 export async function GET() {
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
       price: input.price ?? null,
       city: input.city ?? null,
       imageUrls: input.imageUrls ?? [],
-      importMode: input.title ? "manual" : "pending",
+      importMode: input.importMode ?? "manual",
     };
     const submission = await db.$transaction(async (tx) => {
       const created = await tx.submission.create({

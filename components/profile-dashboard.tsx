@@ -107,6 +107,7 @@ export function ProfileDashboard() {
     if (!response.ok) return;
     const now = new Date().toISOString();
     setNotifications((items) => items.map((item) => ({ ...item, readAt: item.readAt || now })));
+    window.dispatchEvent(new Event("shmavito:notifications-read"));
   }
 
   if (user === undefined) return <main className="shell profile-page profile-loading"><LoaderCircle className="spin" /><p>Загружаем личный кабинет…</p></main>;

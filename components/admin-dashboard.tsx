@@ -6,6 +6,7 @@ import {
   CircleAlert,
   Clock3,
   Eye,
+  ExternalLink,
   FileClock,
   Flag,
   LayoutDashboard,
@@ -23,22 +24,23 @@ import { ReactNode, useCallback, useEffect, useState } from "react";
 import { SiteHeader } from "@/components/site-header";
 
 type Section = "overview" | "moderation" | "categories" | "comments" | "reports" | "users" | "audit" | "settings";
-type QueueItem = { id: string; title: string; description: string; author: string; category: string; categoryId: string; time: string; image: string };
+type QueueItem = { id: string; title: string; description: string; price: number | null; city: string; sourceUrl: string; author: string; category: string; categoryId: string; time: string; image: string; imageUrls: string[] };
 type ApiCategory = { id: string; name: string; slug: string; position: number; isVisible: boolean };
 type ApiUser = { id: string; login: string; displayName: string; avatarUrl: string | null; role: "USER" | "MODERATOR" | "FOUNDER"; status: "ACTIVE" | "BLOCKED"; createdAt: string; _count: { submissions: number; comments: number } };
 type AuditItem = { id: string; action: string; targetType: string; targetId: string; createdAt: string; actor: { login: string; displayName: string } | null };
-type ApiComment = { id: string; body: string; createdAt: string; author: { login: string; displayName: string; avatarUrl: string | null }; listing: { id: string; title: string } };
-type ApiReport = { id: string; reason: string; status: "OPEN" | "RESOLVED" | "DISMISSED"; createdAt: string; reporter: { login: string; displayName: string; avatarUrl: string | null }; listing: { id: string; title: string } | null; comment: { id: string; body: string; listing: { id: string; title: string } } | null };
+type ApiComment = { id: string; body: string; createdAt: string; author: { login: string; displayName: string; avatarUrl: string | null }; listing: { id: string; title: string; submission: { sourceUrl: string } } };
+type ReportListing = { id: string; title: string; submission: { sourceUrl: string } };
+type ApiReport = { id: string; reason: string; status: "OPEN" | "RESOLVED" | "DISMISSED"; createdAt: string; reporter: { login: string; displayName: string; avatarUrl: string | null }; listing: ReportListing | null; comment: { id: string; body: string; listing: ReportListing } | null };
 
-const sectionMeta: Record<Section, { kicker: string; title: string; description: string }> = {
-  overview: { kicker: "ПАНЕЛЬ УПРАВЛЕНИЯ", title: "Добрый вечер, Раф", description: "Вот что происходит в ШМАВИТО прямо сейчас." },
-  moderation: { kicker: "МОДЕРАЦИЯ", title: "Очередь предложений", description: "Проверяйте данные, исправляйте категорию и принимайте решение." },
-  categories: { kicker: "СТРУКТУРА КАТАЛОГА", title: "Категории", description: "Добавляйте, переименовывайте и скрывайте разделы каталога." },
-  comments: { kicker: "СООБЩЕСТВО", title: "Комментарии", description: "Последние обсуждения и инструменты модерации." },
-  reports: { kicker: "БЕЗОПАСНОСТЬ", title: "Жалобы", description: "Очередь сигналов от участников сообщества." },
-  users: { kicker: "ДОСТУП", title: "Пользователи", description: "Роли привязаны к Twitch ID, а выдаются по найденному нику." },
-  audit: { kicker: "СИСТЕМА", title: "Журнал действий", description: "Неизменяемая история критичных действий модераторов." },
-  settings: { kicker: "СИСТЕМА", title: "Настройки", description: "Рабочие лимиты и параметры предложки." },
+const sectionMeta: Record<Section, { kicker: string; title: string }> = {
+  overview: { kicker: "ПАНЕЛЬ УПРАВЛЕНИЯ", title: "Добрый вечер, Раф" },
+  moderation: { kicker: "МОДЕРАЦИЯ", title: "Очередь предложений" },
+  categories: { kicker: "СТРУКТУРА КАТАЛОГА", title: "Категории" },
+  comments: { kicker: "СООБЩЕСТВО", title: "Комментарии" },
+  reports: { kicker: "БЕЗОПАСНОСТЬ", title: "Жалобы" },
+  users: { kicker: "ДОСТУП", title: "Пользователи" },
+  audit: { kicker: "СИСТЕМА", title: "Журнал действий" },
+  settings: { kicker: "СИСТЕМА", title: "Настройки" },
 };
 
 const categoryImages: Record<string, string> = {
@@ -80,20 +82,25 @@ export function AdminDashboard() {
     try {
       const response = await fetch("/api/admin/submissions", { cache: "no-store" });
       if (response.status === 401 || response.status === 403) { setQueueMode("auth"); return; }
-      const payload = await response.json() as { submissions: Array<{ id: string; createdAt: string; rawSnapshot: unknown; author: { displayName: string; login: string }; category: { id: string; name: string; slug: string } }> };
+      const payload = await response.json() as { submissions: Array<{ id: string; sourceUrl: string; createdAt: string; rawSnapshot: unknown; author: { displayName: string; login: string }; category: { id: string; name: string; slug: string } }> };
       if (!response.ok) throw new Error("queue unavailable");
       setQueue(payload.submissions.map((submission) => {
         const snapshot = submission.rawSnapshot && typeof submission.rawSnapshot === "object" && !Array.isArray(submission.rawSnapshot) ? submission.rawSnapshot as Record<string, unknown> : {};
+        const imageUrls = Array.isArray(snapshot.imageUrls) ? snapshot.imageUrls.filter((value): value is string => typeof value === "string") : [];
         return {
           id: submission.id,
           title: typeof snapshot.title === "string" ? snapshot.title : "Новое объявление Avito",
           description: typeof snapshot.description === "string" ? snapshot.description : "",
+          price: typeof snapshot.price === "number" ? snapshot.price : null,
+          city: typeof snapshot.city === "string" ? snapshot.city : "",
+          sourceUrl: submission.sourceUrl,
           author: submission.author.displayName || submission.author.login,
           category: submission.category.name,
           categoryId: submission.category.id,
           time: timeAgo(submission.createdAt),
-          image: Array.isArray(snapshot.imageUrls) && typeof snapshot.imageUrls[0] === "string"
-            ? snapshot.imageUrls[0]
+          imageUrls,
+          image: imageUrls[0]
+            ? imageUrls[0]
             : categoryImages[submission.category.slug] || "/images/car-lineup.png",
         };
       }));
@@ -122,7 +129,7 @@ export function AdminDashboard() {
         </aside>
         <main className="admin-main">
           <div className="admin-title">
-            <div><span className="section-kicker">{meta.kicker}</span><h1>{meta.title}</h1><p>{meta.description}</p></div>
+            <div><span className="section-kicker">{meta.kicker}</span><h1>{meta.title}</h1></div>
             <div className="admin-search"><Search /><input placeholder="Поиск по панели" /><kbd>⌘ K</kbd></div>
           </div>
 
@@ -142,7 +149,7 @@ export function AdminDashboard() {
 }
 
 function AdminNav({ section, queueCount, reportCount, onSelect }: { section: Section; queueCount: number; reportCount: number; onSelect: (section: Section) => void }) {
-  const item = (id: Section, icon: ReactNode, label: string, count?: number) => <button className={section === id ? "active" : ""} onClick={() => onSelect(id)}>{icon}{label}{count !== undefined && <b>{count}</b>}</button>;
+  const item = (id: Section, icon: ReactNode, label: string, count?: number) => <button className={section === id ? "active" : ""} onClick={() => onSelect(id)}>{icon}{label}{Boolean(count) && <b>{count}</b>}</button>;
   return <div className="admin-nav-groups"><div><span>УПРАВЛЕНИЕ</span>{item("overview", <LayoutDashboard />, "Обзор")}{item("moderation", <FileClock />, "Модерация", queueCount)}{item("categories", <Tags />, "Категории")}{item("comments", <MessageSquare />, "Комментарии")}{item("reports", <Flag />, "Жалобы", reportCount)}</div><div><span>СИСТЕМА</span>{item("users", <Users />, "Пользователи")}{item("audit", <Shield />, "Журнал действий")}{item("settings", <Settings />, "Настройки")}</div></div>;
 }
 
@@ -160,20 +167,40 @@ function QueuePanel({ queue, mode, notify, onQueueChange, displayLimit }: { queu
       .then((value) => setCategories(value.categories))
       .catch(() => undefined);
   }, []);
+  function updateItem(itemId: string, patch: Partial<QueueItem>) {
+    onQueueChange(queue.map((item) => item.id === itemId ? { ...item, ...patch } : item));
+  }
   function changeCategory(itemId: string, categoryId: string) {
     const category = categories.find((value) => value.id === categoryId);
     if (!category) return;
-    onQueueChange(queue.map((item) => item.id === itemId ? { ...item, categoryId, category: category.name } : item));
+    updateItem(itemId, { categoryId, category: category.name });
   }
   async function decide(item: QueueItem, decision: "APPROVED" | "REJECTED", rejectionReason?: string) {
     setBusyId(item.id);
     try {
-      await api(`/api/admin/submissions/${encodeURIComponent(item.id)}/decision`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision, rejectionReason, categoryId: item.categoryId, title: item.title, description: item.description }) });
+      await api(`/api/admin/submissions/${encodeURIComponent(item.id)}/decision`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision, rejectionReason, categoryId: item.categoryId, title: item.title, description: item.description, price: item.price, city: item.city || null }) });
       onQueueChange(queue.filter((value) => value.id !== item.id));
       setRejecting(null); setReason(""); notify(decision === "APPROVED" ? "Заявка опубликована" : "Заявка отклонена");
     } catch (error) { notify(error instanceof Error ? error.message : "Ошибка модерации"); } finally { setBusyId(""); }
   }
-  return <section className="admin-card"><div className="admin-card-head"><div><span className="section-kicker">ОЧЕРЕДЬ</span><h2>Новые предложения</h2></div></div>{mode === "auth" ? <AdminEmpty icon={<Shield />} title="Нужен вход модератора" text="Войдите через Twitch. Доступ определяется по Twitch ID." action={<a className="button button-primary" href="/api/auth/twitch/start?returnTo=/admin">Войти через Twitch</a>} /> : mode === "loading" ? <AdminEmpty icon={<Clock3 />} title="Загружаем очередь" text="Проверяем новые предложения." /> : mode === "error" ? <AdminEmpty icon={<CircleAlert />} title="Очередь недоступна" text="Обновите страницу или проверьте базу." /> : queue.length ? <div className="queue-list">{queue.slice(0, displayLimit).map((item) => <article key={item.id}><div className="queue-image"><Image src={item.image} alt="" fill sizes="110px" unoptimized={item.image.startsWith("https://")} /></div><div className="queue-id">#{item.id.slice(-6).toUpperCase()}</div><div className="queue-info"><select className="queue-category" aria-label={`Категория: ${item.title}`} value={item.categoryId} onChange={(event) => changeCategory(item.id, event.target.value)}>{categories.length ? categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>) : <option value={item.categoryId}>{item.category}</option>}</select><h3>{item.title}</h3><p>от <b>{item.author}</b> • {item.time} назад</p></div><div className="queue-actions"><button className="approve" disabled={busyId === item.id} onClick={() => decide(item, "APPROVED")}><Check /> Одобрить</button><button className="reject" disabled={busyId === item.id} onClick={() => setRejecting(item)}><X /> Отклонить</button></div></article>)}</div> : <AdminEmpty icon={<Check />} title="Очередь разобрана" text="Новых заявок пока нет." />}{rejecting && <div className="moderation-backdrop"><section className="moderation-modal" role="dialog" aria-modal="true"><button className="drawer-close" onClick={() => setRejecting(null)} aria-label="Закрыть"><X /></button><span className="section-kicker">ОТКЛОНЕНИЕ</span><h2>{rejecting.title}</h2><p>Автор увидит эту причину.</p><label className="field"><span>Причина <b>*</b></span><textarea autoFocus rows={4} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} /></label><div className="moderation-modal-actions"><button className="button button-ghost" onClick={() => setRejecting(null)}>Отмена</button><button className="button button-primary" disabled={!reason.trim() || busyId === rejecting.id} onClick={() => decide(rejecting, "REJECTED", reason.trim())}>Отклонить</button></div></section></div>}</section>;
+  return <section className="admin-card"><div className="admin-card-head"><div><span className="section-kicker">ОЧЕРЕДЬ</span><h2>Новые предложения</h2></div></div>{mode === "auth" ? <AdminEmpty icon={<Shield />} title="Нужен вход модератора" text="Войдите через Twitch. Доступ определяется по Twitch ID." action={<a className="button button-primary" href="/api/auth/twitch/start?returnTo=/admin">Войти через Twitch</a>} /> : mode === "loading" ? <AdminEmpty icon={<Clock3 />} title="Загружаем очередь" text="Проверяем новые предложения." /> : mode === "error" ? <AdminEmpty icon={<CircleAlert />} title="Очередь недоступна" text="Обновите страницу или проверьте базу." /> : queue.length ? <div className="moderation-list">{queue.slice(0, displayLimit).map((item) => <article className="moderation-item" key={item.id}>
+    <div className="moderation-media">
+      <div className="moderation-cover"><Image src={item.image} alt={item.title} fill sizes="(max-width: 800px) 100vw, 360px" unoptimized={item.image.startsWith("https://")} /></div>
+      {item.imageUrls.length > 1 && <div className="moderation-thumbs">{item.imageUrls.slice(0, 5).map((image, index) => <span key={image}><Image src={image} alt={`Фото ${index + 1}`} fill sizes="70px" unoptimized /></span>)}</div>}
+    </div>
+    <div className="moderation-fields">
+      <div className="moderation-meta"><span>#{item.id.slice(-6).toUpperCase()}</span><span>от <b>{item.author}</b> • {item.time} назад</span></div>
+      <a className="moderation-source" href={item.sourceUrl} target="_blank" rel="noreferrer">Открыть исходное объявление на Avito <ExternalLink size={14} /></a>
+      <label><span>Название</span><input value={item.title} maxLength={160} onChange={(event) => updateItem(item.id, { title: event.target.value })} /></label>
+      <div className="moderation-field-row">
+        <label><span>Категория</span><select value={item.categoryId} onChange={(event) => changeCategory(item.id, event.target.value)}>{categories.length ? categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>) : <option value={item.categoryId}>{item.category}</option>}</select></label>
+        <label><span>Цена, ₽</span><input type="number" min={0} value={item.price ?? ""} onChange={(event) => updateItem(item.id, { price: event.target.value ? Number(event.target.value) : null })} /></label>
+        <label><span>Город</span><input value={item.city} maxLength={100} onChange={(event) => updateItem(item.id, { city: event.target.value })} /></label>
+      </div>
+      <label><span>Описание</span><textarea rows={6} maxLength={4000} value={item.description} onChange={(event) => updateItem(item.id, { description: event.target.value })} /></label>
+      <div className="moderation-decisions"><button className="approve" disabled={busyId === item.id || item.title.trim().length < 2} onClick={() => decide(item, "APPROVED")}><Check /> Одобрить и опубликовать</button><button className="reject" disabled={busyId === item.id} onClick={() => setRejecting(item)}><X /> Отклонить</button></div>
+    </div>
+  </article>)}</div> : <AdminEmpty icon={<Check />} title="Очередь разобрана" text="Новых заявок пока нет." />}{rejecting && <div className="moderation-backdrop"><section className="moderation-modal" role="dialog" aria-modal="true"><button className="drawer-close" onClick={() => setRejecting(null)} aria-label="Закрыть"><X /></button><span className="section-kicker">ОТКЛОНЕНИЕ</span><h2>{rejecting.title}</h2><p>Автор увидит эту причину.</p><label className="field"><span>Причина <b>*</b></span><textarea autoFocus rows={4} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} /></label><div className="moderation-modal-actions"><button className="button button-ghost" onClick={() => setRejecting(null)}>Отмена</button><button className="button button-primary" disabled={!reason.trim() || busyId === rejecting.id} onClick={() => decide(rejecting, "REJECTED", reason.trim())}>Отклонить</button></div></section></div>}</section>;
 }
 
 function CategoriesPanel({ notify }: { notify: (message: string) => void }) {
@@ -212,24 +239,24 @@ function CommentsPanel({ notify }: { notify: (message: string) => void }) {
   const [comments, setComments] = useState<ApiComment[]>([]);
   useEffect(() => { api<{ comments: ApiComment[] }>("/api/admin/comments").then((value) => setComments(value.comments)).catch((error) => notify(error.message)); }, [notify]);
   async function remove(id: string) { try { await api(`/api/admin/comments/${id}`, { method: "DELETE" }); setComments((current) => current.filter((comment) => comment.id !== id)); notify("Комментарий удалён"); } catch (error) { notify(error instanceof Error ? error.message : "Ошибка"); } }
-  return <section className="admin-card admin-workspace"><div className="admin-card-head"><div><span className="section-kicker">{comments.length} КОММЕНТАРИЕВ</span><h2>Последние обсуждения</h2></div></div>{comments.length ? <div className="comment-moderation-list">{comments.map((comment) => <article key={comment.id}><div><strong>{comment.author.displayName || comment.author.login}</strong><small>{new Date(comment.createdAt).toLocaleString("ru-RU")}</small><p>{comment.body}</p><span>в «{comment.listing.title}»</span></div><button className="table-action danger" onClick={() => remove(comment.id)}><Trash2 /> Удалить</button></article>)}</div> : <AdminEmpty icon={<MessageSquare />} title="Комментариев пока нет" text="Новые обсуждения появятся здесь." />}</section>;
+  return <section className="admin-card admin-workspace"><div className="admin-card-head"><div><span className="section-kicker">{comments.length} КОММЕНТАРИЕВ</span><h2>Последние обсуждения</h2></div></div>{comments.length ? <div className="comment-moderation-list">{comments.map((comment) => <article key={comment.id}><div><strong>{comment.author.displayName || comment.author.login}</strong><small>{new Date(comment.createdAt).toLocaleString("ru-RU")}</small><p>{comment.body}</p><a className="moderation-source" href={comment.listing.submission.sourceUrl} target="_blank" rel="noreferrer">«{comment.listing.title}» <ExternalLink size={12} /></a></div><button className="table-action danger" onClick={() => remove(comment.id)}><Trash2 /> Удалить</button></article>)}</div> : <AdminEmpty icon={<MessageSquare />} title="Комментариев пока нет" text="Новых обсуждений нет." />}</section>;
 }
 
 function ReportsPanel({ notify, onCountChange }: { notify: (message: string) => void; onCountChange: (count: number) => void }) {
   const [reports, setReports] = useState<ApiReport[]>([]);
-  useEffect(() => {
-    api<{ reports: ApiReport[] }>("/api/admin/reports?status=OPEN")
-      .then((value) => { setReports(value.reports); onCountChange(value.reports.length); })
-      .catch((error) => notify(error.message));
-  }, [notify, onCountChange]);
-  async function decide(report: ApiReport, status: "RESOLVED" | "DISMISSED") {
+  const [busyId, setBusyId] = useState("");
+  const load = useCallback(() => api<{ reports: ApiReport[] }>("/api/admin/reports?status=OPEN").then((value) => setReports(value.reports)).catch((error) => notify(error.message)), [notify]);
+  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { onCountChange(reports.length); }, [onCountChange, reports.length]);
+  async function decide(report: ApiReport, input: { status: "DISMISSED" } | { action: "REMOVE_CONTENT" }) {
+    setBusyId(report.id);
     try {
-      await api(`/api/admin/reports/${report.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
-      setReports((items) => { const next = items.filter((item) => item.id !== report.id); onCountChange(next.length); return next; });
-      notify(status === "RESOLVED" ? "Жалоба обработана" : "Жалоба отклонена");
-    } catch (error) { notify(error instanceof Error ? error.message : "Ошибка"); }
+      await api(`/api/admin/reports/${report.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+      await load();
+      notify("action" in input ? (report.comment ? "Комментарий удалён" : "Объявление снято с публикации") : "Жалоба удалена из очереди");
+    } catch (error) { notify(error instanceof Error ? error.message : "Ошибка"); } finally { setBusyId(""); }
   }
-  return <section className="admin-card admin-workspace"><div className="admin-card-head"><div><span className="section-kicker">{reports.length} ОТКРЫТЫХ</span><h2>Очередь жалоб</h2></div></div>{reports.length ? <div className="report-list">{reports.map((report) => <article key={report.id}><div><span>{report.comment ? "КОММЕНТАРИЙ" : "ОБЪЯВЛЕНИЕ"}</span><h3>{report.listing?.title || report.comment?.listing.title || "Удалённый материал"}</h3><p>{report.reason}</p><small>от @{report.reporter.login} • {new Date(report.createdAt).toLocaleString("ru-RU")}</small>{report.comment && <blockquote>{report.comment.body}</blockquote>}</div><div><button className="table-action" onClick={() => decide(report, "DISMISSED")}>Отклонить</button><button className="table-action danger" onClick={() => decide(report, "RESOLVED")}><Check /> Обработано</button></div></article>)}</div> : <AdminEmpty icon={<Flag />} title="Жалоб пока нет" text="Новые сигналы на объявления и комментарии появятся здесь." />}</section>;
+  return <section className="admin-card admin-workspace"><div className="admin-card-head"><div><span className="section-kicker">{reports.length} ОТКРЫТЫХ</span><h2>Очередь жалоб</h2></div></div>{reports.length ? <div className="report-list">{reports.map((report) => { const listing = report.listing || report.comment?.listing; return <article key={report.id}><div><span>{report.comment ? "КОММЕНТАРИЙ" : "ОБЪЯВЛЕНИЕ"}</span><h3>{listing?.title || "Удалённый материал"}</h3><p>{report.reason}</p><small>от @{report.reporter.login} • {new Date(report.createdAt).toLocaleString("ru-RU")}</small>{report.comment && <blockquote>{report.comment.body}</blockquote>}{listing && <a className="moderation-source" href={listing.submission.sourceUrl} target="_blank" rel="noreferrer">Открыть на Avito <ExternalLink size={13} /></a>}</div><div><button className="table-action" disabled={busyId === report.id} onClick={() => decide(report, { status: "DISMISSED" })}><Trash2 /> Удалить жалобу</button><button className="table-action danger" disabled={busyId === report.id} onClick={() => decide(report, { action: "REMOVE_CONTENT" })}><Trash2 /> {report.comment ? "Удалить комментарий" : "Снять объявление"}</button></div></article>; })}</div> : <AdminEmpty icon={<Flag />} title="Жалоб пока нет" text="Новых жалоб нет." />}</section>;
 }
 function AdminEmpty({ icon, title, text, action }: { icon: ReactNode; title: string; text: string; action?: ReactNode }) { return <div className="queue-empty">{icon}<h3>{title}</h3><p>{text}</p>{action}</div>; }
 function Metric({ icon, value, label, detail, accent }: { icon: ReactNode; value: string; label: string; detail: string; accent: string }) { return <div className={`metric ${accent}`}><span>{icon}</span><div><strong>{value}</strong><p>{label}</p><small>{detail}</small></div></div>; }

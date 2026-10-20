@@ -11,7 +11,7 @@ export async function GET() {
       take: 100,
       include: {
         author: { select: { login: true, displayName: true, avatarUrl: true } },
-        listing: { select: { id: true, title: true } },
+        listing: { select: { id: true, title: true, submission: { select: { sourceUrl: true } } } },
       },
     });
     return Response.json({ comments });

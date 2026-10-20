@@ -2,11 +2,23 @@
 
 import Link from "next/link";
 import { Bell, Menu, Plus, Shield, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AuthButton } from "@/components/auth-button";
 
 export function SiteHeader({ active = "catalog" }: { active?: "catalog" | "submit" | "profile" | "admin" }) {
   const [open, setOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/notifications", { cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() as Promise<{ notifications: Array<{ readAt: string | null }> }> : null)
+      .then((payload) => { if (active && payload) setUnreadCount(payload.notifications.filter((item) => !item.readAt).length); })
+      .catch(() => undefined);
+    const markRead = () => setUnreadCount(0);
+    window.addEventListener("shmavito:notifications-read", markRead);
+    return () => { active = false; window.removeEventListener("shmavito:notifications-read", markRead); };
+  }, []);
 
   return (
     <header className="site-header">
@@ -27,7 +39,7 @@ export function SiteHeader({ active = "catalog" }: { active?: "catalog" | "submi
         <div className="header-actions">
           <Link href="/profile" className="icon-button notification-button" aria-label="Уведомления">
             <Bell size={18} />
-            <span>2</span>
+            {unreadCount > 0 && <span>{unreadCount}</span>}
           </Link>
           <Link href="/submit" className="button button-primary compact"><Plus size={17} /> Предложить</Link>
           <AuthButton />

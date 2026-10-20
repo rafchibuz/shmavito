@@ -3,6 +3,7 @@ import { normalizeAvitoUrl } from "@/lib/submissions";
 
 const MAX_HTML_BYTES = 3 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 10_000;
+const READER_TIMEOUT_MS = 25_000;
 const MAX_REDIRECTS = 3;
 
 export type AvitoImportResult = {
@@ -170,6 +171,75 @@ function manualResult(normalizedUrl: string, warning: string): AvitoImportResult
   return { mode: "manual", normalizedUrl, title: "", description: "", price: null, city: "", imageUrls: [], importedFields: [], warning };
 }
 
+function cleanMarkdown(value: string, maxLength: number) {
+  return cleanText(value
+    .replace(/!\[[^\]]*\]\([^\n)]+\)/g, "")
+    .replace(/\[([^\]]+)\]\([^\n)]+\)/g, "$1")
+    .replace(/^\s*[-*]\s+/gm, "")
+    .replace(/[*_`>#]/g, ""), maxLength);
+}
+
+function parseReaderMarkdown(markdown: string, normalizedUrl: string): AvitoImportResult | null {
+  const titleLine = markdown.match(/^Title:\s*(.+)$/mi)?.[1]
+    ?? markdown.match(/^#\s+(.+)$/m)?.[1]
+    ?? "";
+  const title = cleanMarkdown(titleLine, 160).replace(/\s*[—|-]\s*Авито\s*$/i, "").trim();
+  if (!title || /доступ ограничен|проверка безопасности/i.test(title)) return null;
+
+  const descriptionStart = markdown.search(/^##\s+Описание\s*$/mi);
+  const descriptionTail = descriptionStart >= 0 ? markdown.slice(descriptionStart).replace(/^##\s+Описание\s*$/mi, "") : "";
+  const nextHeading = descriptionTail.search(/^##\s+/m);
+  const descriptionBlock = nextHeading >= 0 ? descriptionTail.slice(0, nextHeading) : descriptionTail;
+  const description = cleanMarkdown(descriptionBlock, 4000);
+  const priceMatch = markdown.match(/^\s*([\d\s]{2,})\s*₽\s*$/m);
+  const price = priceMatch ? parsePrice(priceMatch[1]) : null;
+
+  const imageUrls: string[] = [];
+  let city = "";
+  const imagePattern = /!\[([^\]]*)\]\((https:\/\/[^)\s]+)\)/gi;
+  for (const match of markdown.matchAll(imagePattern)) {
+    const image = safeImageUrl(match[2]);
+    if (!image) continue;
+    const hostname = new URL(image).hostname.toLowerCase();
+    if (hostname === "img.avito.st" || hostname.endsWith(".img.avito.st")) {
+      if (!imageUrls.includes(image)) imageUrls.push(image);
+      if (!city) city = cleanText(match[1].match(/,\s*([^,]+)$/)?.[1] ?? "", 100);
+    }
+    if (imageUrls.length >= 5) break;
+  }
+
+  const importedFields = [title && "title", description && "description", price !== null && "price", city && "city", imageUrls.length && "images"]
+    .filter((value): value is string => Boolean(value));
+  return {
+    mode: "automatic",
+    normalizedUrl,
+    title,
+    description,
+    price,
+    city,
+    imageUrls,
+    importedFields,
+    warning: importedFields.length < 4 ? "Часть данных объявления не найдена. Проверьте заполненные поля перед отправкой." : null,
+  };
+}
+
+async function importThroughReader(normalizedUrl: string, fallbackWarning: string) {
+  try {
+    const target = new URL(normalizedUrl);
+    const readerTarget = `http://www.avito.ru${target.pathname}${target.search}`;
+    const response = await fetch(`https://r.jina.ai/${readerTarget}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(READER_TIMEOUT_MS),
+      headers: { Accept: "text/plain" },
+    });
+    if (!response.ok) return manualResult(normalizedUrl, fallbackWarning);
+    const parsed = parseReaderMarkdown(await readLimitedText(response), normalizedUrl);
+    return parsed ?? manualResult(normalizedUrl, fallbackWarning);
+  } catch {
+    return manualResult(normalizedUrl, fallbackWarning);
+  }
+}
+
 export async function importAvitoListing(sourceUrl: string): Promise<AvitoImportResult> {
   const normalizedUrl = normalizeAvitoUrl(sourceUrl);
   let fetched: Awaited<ReturnType<typeof fetchAvitoHtml>>;
@@ -177,16 +247,16 @@ export async function importAvitoListing(sourceUrl: string): Promise<AvitoImport
     fetched = await fetchAvitoHtml(normalizedUrl);
   } catch (error) {
     if (error instanceof ApiError && error.status < 500) throw error;
-    return manualResult(normalizedUrl, "Avito не ответил вовремя. Заполните данные вручную — ссылка уже сохранена в форме.");
+    return importThroughReader(normalizedUrl, "Avito не ответил вовремя. Заполните данные вручную — ссылка уже сохранена в форме.");
   }
 
   const { response, html, currentUrl } = fetched;
   if ([401, 403, 429].includes(response.status) || /captcha|доступ ограничен|подозрительн(?:ая|ую) активност/i.test(html)) {
-    return manualResult(currentUrl, "Avito ограничил автоматический доступ к странице. Заполните поля вручную.");
+    return importThroughReader(currentUrl, "Avito ограничил автоматический доступ к странице. Заполните поля вручную.");
   }
-  if (!response.ok) return manualResult(currentUrl, `Avito вернул статус ${response.status}. Проверьте ссылку и заполните поля вручную.`);
+  if (!response.ok) return importThroughReader(currentUrl, `Avito вернул статус ${response.status}. Проверьте ссылку и заполните поля вручную.`);
   if (!response.headers.get("content-type")?.toLowerCase().includes("text/html")) {
-    return manualResult(currentUrl, "По ссылке получена не страница объявления. Заполните данные вручную.");
+    return importThroughReader(currentUrl, "По ссылке получена не страница объявления. Заполните данные вручную.");
   }
 
   const metadata = readMetadata(html);
@@ -217,7 +287,7 @@ export async function importAvitoListing(sourceUrl: string): Promise<AvitoImport
   }).filter((value): value is string => Boolean(value)))].slice(0, 5);
 
   const importedFields = [title && "title", description && "description", price !== null && "price", city && "city", imageUrls.length && "images"].filter((value): value is string => Boolean(value));
-  if (!title) return manualResult(currentUrl, "Avito открыл страницу, но не отдал название объявления. Заполните данные вручную.");
+  if (!title) return importThroughReader(currentUrl, "Avito открыл страницу, но не отдал название объявления. Заполните данные вручную.");
 
   return {
     mode: "automatic",

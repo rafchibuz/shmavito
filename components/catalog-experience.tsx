@@ -54,6 +54,7 @@ export function CatalogExperience() {
   const [catalogCategories, setCatalogCategories] = useState<readonly string[]>(demoCategories);
   const [catalogMode, setCatalogMode] = useState<"loading" | "live" | "demo">("loading");
   const [viewer, setViewer] = useState<CatalogViewer | null>(null);
+  const [portraitOpen, setPortraitOpen] = useState(false);
 
   useEffect(() => {
     const hydrateLocalState = window.setTimeout(() => {
@@ -211,16 +212,15 @@ export function CatalogExperience() {
             <div><strong>26 910</strong><span>переходов</span></div>
           </div>
         </div>
-        <div className="steel-card">
+        <button type="button" className="steel-card" onClick={() => setPortraitOpen(true)} aria-label="Увеличить фотографию STEEL">
           <Image src="/images/steel-portrait.png" alt="STEEL" fill sizes="340px" loading="eager" />
           <div><span>CURATED BY</span><strong>STEEL</strong><small>twitch.tv/steel</small></div>
-        </div>
+        </button>
       </section>
 
       <main className="catalog-section shell" id="catalog">
         <div className="section-heading">
           <div><span className="section-kicker">КАТАЛОГ</span><h2>Свежие предложения</h2></div>
-          <p>Все карточки проверены модераторами. Серые вы уже открывали.</p>
         </div>
 
         <div className="catalog-toolbar">
@@ -255,6 +255,7 @@ export function CatalogExperience() {
       </section>
 
       {selected && <ListingDrawer item={selected} liked={liked.includes(selected.id)} own={catalogMode === "live" ? selected.author.id === viewer?.id : selected.author.name === "rafchibiskus"} viewerAvatar={viewer?.avatarUrl || null} comments={comments[selected.id] || []} onClose={() => setSelected(null)} onLike={() => toggleLike(selected.id)} onComment={(text, parent) => addComment(selected.id, text, parent)} onReport={reportTarget} />}
+      {portraitOpen && <div className="portrait-lightbox" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPortraitOpen(false); }}><div role="dialog" aria-modal="true" aria-label="Фотография STEEL"><button onClick={() => setPortraitOpen(false)} aria-label="Закрыть"><X /></button><Image src="/images/steel-portrait.png" alt="STEEL" fill sizes="(max-width: 720px) 94vw, 620px" /></div></div>}
     </>
   );
 }
@@ -275,7 +276,7 @@ function ListingCard({ item, viewed, liked, own, onOpen, onLike }: { item: Listi
         <div className="author-row"><span className="avatar"><Image src={item.author.avatar} alt="" width={30} height={30} /></span><div><b>{item.author.name}</b><small>{item.published}</small></div><BadgeCheck size={15} /></div>
       </div>
       <div className="card-footer">
-        <button className={liked ? "liked" : ""} disabled={own || item.unavailable} onClick={onLike} title={own ? "Нельзя лайкнуть собственное предложение" : "Лайк"}><Heart size={16} fill={liked ? "currentColor" : "none"} /> {item.likes + Number(liked)}</button>
+        <button className={liked ? "liked" : ""} disabled={own || item.unavailable} onClick={onLike} title={own ? "Это ваше предложение — свои объявления лайкать нельзя" : "Лайк"}><Heart size={16} fill={liked ? "currentColor" : "none"} /> {own ? "Ваше" : item.likes + Number(liked)}</button>
         <button onClick={onOpen}><MessageCircle size={16} /> {item.comments}</button>
         <span><Eye size={16} /> {item.views.toLocaleString("ru-RU")}</span>
         <button className="open-card" onClick={onOpen}><ArrowRight size={17} /></button>
@@ -330,7 +331,7 @@ function ListingDrawer({ item, liked, own, viewerAvatar, comments, onClose, onLi
           <div className="drawer-author"><span className="avatar"><Image src={item.author.avatar} alt="" width={38} height={38} /></span><div><small>Предложил</small><strong>{item.author.name}</strong></div><BadgeCheck size={16} /></div>
           <div className="drawer-actions">
             <a className={`button button-primary ${item.unavailable ? "disabled" : ""}`} href={item.unavailable ? undefined : item.sourceUrl} target="_blank" rel="noreferrer">Открыть на Avito <ExternalLink size={17} /></a>
-            <button className={`button button-ghost ${liked ? "liked" : ""}`} onClick={onLike} disabled={own || item.unavailable}><Heart size={17} fill={liked ? "currentColor" : "none"} /> {item.likes + Number(liked)}</button>
+            <button className={`button button-ghost ${liked ? "liked" : ""}`} onClick={onLike} disabled={own || item.unavailable} title={own ? "Свои объявления лайкать нельзя" : "Лайк"}><Heart size={17} fill={liked ? "currentColor" : "none"} /> {own ? "Ваше объявление" : item.likes + Number(liked)}</button>
             <button className="icon-button" title="Пожаловаться" onClick={() => setReportTarget({ type: "listing", id: item.id })}><Flag size={18} /></button>
           </div>
           <p className="external-note">ШМАВИТО не является Avito и не участвует в сделке. Проверяйте объявление и продавца на внешнем сайте.</p>

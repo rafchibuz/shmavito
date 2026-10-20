@@ -130,6 +130,7 @@ export function SubmitForm() {
                   price: Number(price.replace(/\D/g, "")) || null,
                   city,
                   imageUrls,
+                  importMode,
                 }),
               });
               const payload = await response.json() as { submission?: { id: string }; message?: string };

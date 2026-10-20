@@ -12,6 +12,8 @@ const runId = crypto.randomUUID().slice(0, 8);
 const createdCommentIds = [];
 const createdReportIds = [];
 const createdUserIds = [];
+const createdSubmissionIds = [];
+const createdListingIds = [];
 
 function invariant(condition, message) {
   if (!condition) throw new Error(message);
@@ -47,6 +49,13 @@ async function request(path, { token, method = "GET", body, expected = 200 } = {
 }
 
 async function cleanup() {
+  if (createdListingIds.length) {
+    await db.listing.deleteMany({ where: { id: { in: createdListingIds } } });
+  }
+  if (createdSubmissionIds.length) {
+    await db.auditLog.deleteMany({ where: { targetType: "Submission", targetId: { in: createdSubmissionIds } } });
+    await db.submission.deleteMany({ where: { id: { in: createdSubmissionIds } } });
+  }
   if (createdReportIds.length) {
     await db.auditLog.deleteMany({ where: { targetType: "Report", targetId: { in: createdReportIds } } });
     await db.report.deleteMany({ where: { id: { in: createdReportIds } } });
@@ -97,8 +106,60 @@ async function main() {
     sessionToken(moderator.id),
   ]);
 
+  const category = await db.category.findFirst({ where: { isVisible: true, deletedAt: null } });
+  invariant(category, "Smoke test requires a visible category");
+  const smokeSourceUrl = `https://www.avito.ru/moskva/telefony/smoke_${runId}_9999999999`;
+  const submissionPayload = await request("/api/submissions", {
+    token: viewerToken,
+    method: "POST",
+    body: {
+      sourceUrl: smokeSourceUrl,
+      categoryId: category.id,
+      title: `Smoke listing ${runId}`,
+      description: "Temporary moderation flow check",
+      price: 123456,
+      city: "Москва",
+      imageUrls: [],
+      importMode: "automatic",
+    },
+    expected: 201,
+  });
+  createdSubmissionIds.push(submissionPayload.submission.id);
+  const moderationQueue = await request("/api/admin/submissions", { token: moderatorToken });
+  const queuedSubmission = moderationQueue.submissions.find((item) => item.id === submissionPayload.submission.id);
+  invariant(queuedSubmission?.sourceUrl === smokeSourceUrl, "Moderation queue missed the source URL");
+  invariant(queuedSubmission?.rawSnapshot?.title === `Smoke listing ${runId}`, "Moderation queue missed imported fields");
+  const approved = await request(`/api/admin/submissions/${submissionPayload.submission.id}/decision`, {
+    token: moderatorToken,
+    method: "POST",
+    body: {
+      decision: "APPROVED",
+      categoryId: category.id,
+      title: `Smoke listing edited ${runId}`,
+      description: "Edited by moderator",
+      price: 120000,
+      city: "Москва",
+    },
+  });
+  createdListingIds.push(approved.listing.id);
+  const catalogAfterApproval = await request("/api/listings");
+  invariant(catalogAfterApproval.listings.some((item) => item.id === approved.listing.id && item.title.includes("edited")), "Approved listing did not reach the public catalog");
+
   const authenticatedCatalog = await request("/api/listings", { token: viewerToken });
   invariant(authenticatedCatalog.viewer?.id === viewer.id, "Authenticated viewer was not returned");
+
+  if (process.env.SMOKE_AVITO_IMPORT === "1") {
+    const imported = await request("/api/import/avito", {
+      token: viewerToken,
+      method: "POST",
+      body: { sourceUrl: listing.sourceUrl },
+    });
+    invariant(imported.mode === "automatic", `Avito import did not finish automatically: ${JSON.stringify(imported)}`);
+    invariant(imported.title && imported.description, "Avito import missed title or description");
+    invariant(imported.price > 0 && imported.city, "Avito import missed price or city");
+    invariant(imported.imageUrls?.length > 0, "Avito import missed listing images");
+    console.log(`Avito import passed: ${imported.title}; ${imported.price} ₽; ${imported.city}; ${imported.imageUrls.length} image(s).`);
+  }
 
   const firstView = await request(`/api/listings/${listing.id}/view`, { token: viewerToken, method: "POST" });
   invariant(firstView.viewed === true && firstView.openCount === 1, "First view was not registered");
@@ -176,8 +237,10 @@ async function main() {
   await request(`/api/admin/reports/${commentReport.report.id}`, {
     token: moderatorToken,
     method: "PATCH",
-    body: { status: "DISMISSED" },
+    body: { action: "REMOVE_CONTENT" },
   });
+  const removedComment = await db.comment.findUnique({ where: { id: reply.comment.id } });
+  invariant(removedComment?.deletedAt, "Reported comment was not soft-deleted");
 
   const auditCount = await db.auditLog.count({
     where: { targetType: "Report", targetId: { in: createdReportIds } },

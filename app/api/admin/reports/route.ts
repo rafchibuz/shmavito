@@ -16,8 +16,8 @@ export async function GET(request: Request) {
       take: 100,
       include: {
         reporter: { select: { login: true, displayName: true, avatarUrl: true } },
-        listing: { select: { id: true, title: true } },
-        comment: { select: { id: true, body: true, listing: { select: { id: true, title: true } } } },
+        listing: { select: { id: true, title: true, submission: { select: { sourceUrl: true } } } },
+        comment: { select: { id: true, body: true, listing: { select: { id: true, title: true, submission: { select: { sourceUrl: true } } } } } },
       },
     });
     return Response.json({ reports });
