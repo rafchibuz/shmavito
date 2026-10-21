@@ -209,9 +209,9 @@ export function CatalogExperience() {
         <Image className="hero-bg" src="/images/hero-car.png" alt="Автомобили STEEL ночью" fill preload sizes="100vw" />
         <div className="hero-overlay" />
         <div className="hero-copy shell">
-          <div className="eyebrow"><Sparkles size={15} /> ПРЕДЛОЖКА STEEL</div>
-          <h1>НАХОДКИ,<br /><span>ДОСТОЙНЫЕ ЭФИРА</span></h1>
-          <p>Сообщество находит интересные объявления. Модераторы отбирают лучшее. STEEL смотрит вместе с вами.</p>
+          <div className="eyebrow"><Sparkles size={15} /> ШМАВИТО × STEEL</div>
+          <h1>НАХОДКИ<br /><span>СТАИ</span></h1>
+          <p>Стая находит самые интересные объявления. Модераторы проверяют — STEEL выносит вердикт.</p>
           <div className="hero-actions">
             <Link className="button button-primary" href="/submit">Предложить объявление <ArrowRight size={18} /></Link>
             <a className="button button-ghost" href="#catalog">Смотреть каталог</a>

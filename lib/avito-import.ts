@@ -196,10 +196,12 @@ function isAvitoListingImage(value: string) {
   }
 }
 
-function parseReaderMarkdown(markdown: string, normalizedUrl: string, metadataImages: string[] = []): AvitoImportResult | null {
-  const titleLine = markdown.match(/^Title:\s*(.+)$/mi)?.[1]
+function parseReaderMarkdown(markdown: string, normalizedUrl: string, metadataImages: string[] = [], structuredTitle = "", structuredImages: string[] = []): AvitoImportResult | null {
+  const titleLine = structuredTitle || (
+    markdown.match(/^Title:\s*(.+)$/mi)?.[1]
     ?? markdown.match(/^#\s+(.+)$/m)?.[1]
-    ?? "";
+    ?? ""
+  );
   const title = cleanMarkdown(titleLine, 160).replace(/\s*[—|-]\s*Авито\s*$/i, "").trim();
   if (!title || /доступ ограничен|проверка безопасности/i.test(title)) return null;
 
@@ -211,7 +213,7 @@ function parseReaderMarkdown(markdown: string, normalizedUrl: string, metadataIm
   const priceMatch = markdown.match(/^\s*([\d\s]{2,})\s*₽\s*$/m);
   const price = priceMatch ? parsePrice(priceMatch[1]) : null;
 
-  const imageUrls = [...new Set(metadataImages.map(safeImageUrl)
+  const imageUrls = [...new Set([...structuredImages, ...metadataImages].map(safeImageUrl)
     .filter((value): value is string => value !== null && isAvitoListingImage(value)))].slice(0, MAX_IMAGES);
   let city = "";
   const imagePattern = /!\[([^\]]*)\]\((https:\/\/[^)\s]+)\)/gi;
@@ -261,10 +263,17 @@ async function importThroughReader(normalizedUrl: string, fallbackWarning: strin
       let markdown = body;
       let metadataImages: string[] = [];
       try {
-        const payload = JSON.parse(body) as { data?: { content?: unknown; metadata?: Record<string, unknown> } };
+        const payload = JSON.parse(body) as { data?: { title?: unknown; content?: unknown; images?: Record<string, unknown>; metadata?: Record<string, unknown> } };
         if (typeof payload.data?.content === "string") markdown = payload.data.content;
         const images = payload.data?.metadata?.["og:image"];
         metadataImages = (Array.isArray(images) ? images : [images]).filter((value): value is string => typeof value === "string");
+        const structuredTitle = typeof payload.data?.title === "string" ? payload.data.title : "";
+        const titleWords = cleanText(structuredTitle, 160).toLowerCase().split(/\s+/).filter((word) => word.length >= 3).slice(0, 3);
+        const structuredImages = Object.entries(payload.data?.images ?? {})
+          .filter(([label, value]) => typeof value === "string" && titleWords.some((word) => label.toLowerCase().includes(word)))
+          .map(([, value]) => value as string);
+        const parsed = parseReaderMarkdown(markdown, normalizedUrl, metadataImages, structuredTitle, structuredImages);
+        if (parsed) return parsed;
       } catch {
         // The reader can return plain Markdown when structured output is unavailable.
       }
