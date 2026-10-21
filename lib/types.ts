@@ -8,6 +8,7 @@ export type Listing = {
   category: Category;
   description: string;
   image: string;
+  images?: string[];
   author: { id?: string; name: string; avatar: string };
   published: string;
   likes: number;

@@ -5,6 +5,8 @@ const MAX_HTML_BYTES = 3 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 10_000;
 const READER_TIMEOUT_MS = 25_000;
 const MAX_REDIRECTS = 3;
+const MAX_IMAGES = 40;
+const MAX_DESCRIPTION_LENGTH = 12_000;
 
 export type AvitoImportResult = {
   mode: "automatic" | "manual";
@@ -35,8 +37,12 @@ function cleanText(value: unknown, maxLength: number) {
   if (typeof value !== "string") return "";
   return decodeHtml(value)
     .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/\s*(?:p|div|section|article|h[1-6])\s*>/gi, "\n\n")
+    .replace(/<li\b[^>]*>/gi, "\n• ")
+    .replace(/<\/li\s*>/gi, "")
     .replace(/<[^>]+>/g, " ")
     .replace(/[ \t]+/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim()
     .slice(0, maxLength);
@@ -175,11 +181,22 @@ function cleanMarkdown(value: string, maxLength: number) {
   return cleanText(value
     .replace(/!\[[^\]]*\]\([^\n)]+\)/g, "")
     .replace(/\[([^\]]+)\]\([^\n)]+\)/g, "$1")
-    .replace(/^\s*[-*]\s+/gm, "")
+    .replace(/^\s*[-*]\s+/gm, "• ")
     .replace(/[*_`>#]/g, ""), maxLength);
 }
 
-function parseReaderMarkdown(markdown: string, normalizedUrl: string): AvitoImportResult | null {
+function isAvitoListingImage(value: string) {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    return hostname.endsWith(".img.avito.st")
+      || ((hostname === "www.avito.ru" || hostname === "avito.ru") && url.pathname.startsWith("/img/share/"));
+  } catch {
+    return false;
+  }
+}
+
+function parseReaderMarkdown(markdown: string, normalizedUrl: string, metadataImages: string[] = []): AvitoImportResult | null {
   const titleLine = markdown.match(/^Title:\s*(.+)$/mi)?.[1]
     ?? markdown.match(/^#\s+(.+)$/m)?.[1]
     ?? "";
@@ -190,11 +207,12 @@ function parseReaderMarkdown(markdown: string, normalizedUrl: string): AvitoImpo
   const descriptionTail = descriptionStart >= 0 ? markdown.slice(descriptionStart).replace(/^##\s+Описание\s*$/mi, "") : "";
   const nextHeading = descriptionTail.search(/^##\s+/m);
   const descriptionBlock = nextHeading >= 0 ? descriptionTail.slice(0, nextHeading) : descriptionTail;
-  const description = cleanMarkdown(descriptionBlock, 4000);
+  const description = cleanMarkdown(descriptionBlock, MAX_DESCRIPTION_LENGTH);
   const priceMatch = markdown.match(/^\s*([\d\s]{2,})\s*₽\s*$/m);
   const price = priceMatch ? parsePrice(priceMatch[1]) : null;
 
-  const imageUrls: string[] = [];
+  const imageUrls = [...new Set(metadataImages.map(safeImageUrl)
+    .filter((value): value is string => value !== null && isAvitoListingImage(value)))].slice(0, MAX_IMAGES);
   let city = "";
   const imagePattern = /!\[([^\]]*)\]\((https:\/\/[^)\s]+)\)/gi;
   for (const match of markdown.matchAll(imagePattern)) {
@@ -202,10 +220,10 @@ function parseReaderMarkdown(markdown: string, normalizedUrl: string): AvitoImpo
     if (!image) continue;
     const hostname = new URL(image).hostname.toLowerCase();
     if (hostname === "img.avito.st" || hostname.endsWith(".img.avito.st")) {
-      if (!imageUrls.includes(image)) imageUrls.push(image);
+      if (!metadataImages.length && !imageUrls.includes(image)) imageUrls.push(image);
       if (!city) city = cleanText(match[1].match(/,\s*([^,]+)$/)?.[1] ?? "", 100);
     }
-    if (imageUrls.length >= 5) break;
+    if (imageUrls.length >= MAX_IMAGES && city) break;
   }
 
   const importedFields = [title && "title", description && "description", price !== null && "price", city && "city", imageUrls.length && "images"]
@@ -236,10 +254,21 @@ async function importThroughReader(normalizedUrl: string, fallbackWarning: strin
       const response = await fetch(`https://r.jina.ai/${readerTarget}`, {
         cache: "no-store",
         signal: AbortSignal.timeout(READER_TIMEOUT_MS),
-        headers: { Accept: "text/plain" },
+        headers: { Accept: "application/json", "X-With-Images-Summary": "true" },
       });
       if (!response.ok) continue;
-      const parsed = parseReaderMarkdown(await readLimitedText(response), normalizedUrl);
+      const body = await readLimitedText(response);
+      let markdown = body;
+      let metadataImages: string[] = [];
+      try {
+        const payload = JSON.parse(body) as { data?: { content?: unknown; metadata?: Record<string, unknown> } };
+        if (typeof payload.data?.content === "string") markdown = payload.data.content;
+        const images = payload.data?.metadata?.["og:image"];
+        metadataImages = (Array.isArray(images) ? images : [images]).filter((value): value is string => typeof value === "string");
+      } catch {
+        // The reader can return plain Markdown when structured output is unavailable.
+      }
+      const parsed = parseReaderMarkdown(markdown, normalizedUrl, metadataImages);
       if (parsed) return parsed;
     } catch {
       // Try the next canonical Avito host: anti-bot rules differ between web and mobile pages.
@@ -279,7 +308,7 @@ export async function importAvitoListing(sourceUrl: string): Promise<AvitoImport
   const title = cleanText(product?.name ?? product?.headline ?? metadata.get("og:title") ?? titleTag, 160)
     .replace(/\s*[—|-]\s*Авито\s*$/i, "")
     .trim();
-  const description = cleanText(product?.description ?? metadata.get("og:description") ?? metadata.get("description"), 4000);
+  const description = cleanText(product?.description ?? metadata.get("og:description") ?? metadata.get("description"), MAX_DESCRIPTION_LENGTH);
 
   const offer = searchable.find((record) => /offer/.test(recordType(record))) ?? searchable.find((record) => record.price !== undefined);
   const price = parsePrice(offer?.price ?? offer?.lowPrice ?? metadata.get("product:price:amount"));
@@ -293,7 +322,7 @@ export async function importAvitoListing(sourceUrl: string): Promise<AvitoImport
   const imageUrls = [...new Set(imageCandidates.flatMap((value) => {
     if (isRecord(value)) return [safeImageUrl(value.url ?? value.contentUrl)];
     return [safeImageUrl(value)];
-  }).filter((value): value is string => Boolean(value)))].slice(0, 5);
+  }).filter((value): value is string => Boolean(value)))].slice(0, MAX_IMAGES);
 
   const importedFields = [title && "title", description && "description", price !== null && "price", city && "city", imageUrls.length && "images"].filter((value): value is string => Boolean(value));
   if (!title) return importThroughReader(currentUrl, "Avito открыл страницу, но не отдал название объявления. Заполните данные вручную.");

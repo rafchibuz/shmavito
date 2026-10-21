@@ -9,7 +9,7 @@ const decisionSchema = z.object({
   rejectionReason: z.string().trim().max(500).optional(),
   categoryId: z.string().min(1).optional(),
   title: z.string().trim().min(2).max(160).optional(),
-  description: z.string().trim().max(4000).optional(),
+  description: z.string().trim().max(12_000).optional(),
   price: z.number().int().nonnegative().max(2_000_000_000).nullable().optional(),
   city: z.string().trim().max(100).nullable().optional(),
 }).superRefine((value, context) => {
@@ -77,7 +77,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         ? input.city
         : typeof snapshot.city === "string" ? snapshot.city : null;
       const imageUrls = Array.isArray(snapshot.imageUrls)
-        ? snapshot.imageUrls.filter((item): item is string => typeof item === "string").slice(0, 5)
+        ? snapshot.imageUrls.filter((item): item is string => typeof item === "string").slice(0, 40)
         : [];
 
       const listing = await tx.listing.create({

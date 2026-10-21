@@ -56,7 +56,7 @@ export async function GET(request: Request) {
             author: { select: { login: true, displayName: true, avatarUrl: true } },
           },
         },
-        images: { orderBy: [{ isCover: "desc" }, { position: "asc" }], take: 1 },
+        images: { orderBy: [{ isCover: "desc" }, { position: "asc" }] },
         _count: { select: { likes: true, comments: true, views: true } },
       },
     });
@@ -79,6 +79,11 @@ export async function GET(request: Request) {
         image: listing.images[0]?.storageKey.startsWith("public/")
           ? `/uploads/${listing.images[0].storageKey.slice("public/".length)}`
           : listing.images[0]?.sourceUrl || fallbackImages[listing.category.slug] || "/images/car-lineup.png",
+        images: listing.images.length
+          ? listing.images.map((image) => image.storageKey.startsWith("public/")
+            ? `/uploads/${image.storageKey.slice("public/".length)}`
+            : image.sourceUrl).filter((image): image is string => Boolean(image))
+          : [fallbackImages[listing.category.slug] || "/images/car-lineup.png"],
         author: {
           id: listing.submission.authorId,
           name: listing.submission.author.displayName || listing.submission.author.login,

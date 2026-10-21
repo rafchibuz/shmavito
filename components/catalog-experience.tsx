@@ -7,12 +7,17 @@ import {
   ArrowRight,
   BadgeCheck,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Eye,
   ExternalLink,
   Flag,
   Heart,
+  Maximize2,
   MapPin,
   MessageCircle,
+  Minus,
+  Plus,
   Search,
   Send,
   SlidersHorizontal,
@@ -253,20 +258,34 @@ export function CatalogExperience() {
         <div className="shell submit-cta-inner"><div><span className="section-kicker">НАШЛИ ЧТО-ТО ИНТЕРЕСНОЕ?</span><h2>Отправьте ссылку — остальное сделаем мы</h2><p>Вставьте объявление Avito, выберите категорию и проверьте данные.</p></div><Link className="button button-light" href="/submit">Предложить объявление <ArrowRight size={18} /></Link></div>
       </section>
 
-      {selected && <ListingDrawer item={selected} liked={liked.includes(selected.id)} own={catalogMode === "live" ? selected.author.id === viewer?.id : selected.author.name === "rafchibiskus"} viewerAvatar={viewer?.avatarUrl || null} comments={comments[selected.id] || []} onClose={() => setSelected(null)} onLike={() => toggleLike(selected.id)} onComment={(text, parent) => addComment(selected.id, text, parent)} onReport={reportTarget} />}
+      {selected && <ListingDrawer key={selected.id} item={selected} liked={liked.includes(selected.id)} own={catalogMode === "live" ? selected.author.id === viewer?.id : selected.author.name === "rafchibiskus"} viewerAvatar={viewer?.avatarUrl || null} comments={comments[selected.id] || []} onClose={() => setSelected(null)} onLike={() => toggleLike(selected.id)} onComment={(text, parent) => addComment(selected.id, text, parent)} onReport={reportTarget} />}
     </>
   );
 }
 
 function ListingCard({ item, viewed, liked, own, onOpen, onLike }: { item: Listing; viewed: boolean; liked: boolean; own: boolean; onOpen: () => void; onLike: () => void }) {
+  const images = item.images?.length ? item.images : [item.image];
+  const [imageIndex, setImageIndex] = useState(0);
+
+  function moveImage(direction: -1 | 1) {
+    setImageIndex((current) => (current + direction + images.length) % images.length);
+  }
+
   return (
     <article className={`listing-card ${viewed ? "is-viewed" : ""} ${item.unavailable ? "is-unavailable" : ""}`}>
-      <button className="card-media" onClick={onOpen} aria-label={`Открыть ${item.title}`}>
-        <Image src={item.image} alt="" fill sizes="(max-width: 720px) 100vw, (max-width: 1100px) 50vw, 33vw" unoptimized={item.image.startsWith("https://")} />
+      <div className="card-media">
+        <button className="card-media-open" onClick={onOpen} aria-label={`Открыть ${item.title}`}>
+          <Image src={images[imageIndex]} alt={`${item.title}, фото ${imageIndex + 1}`} fill sizes="(max-width: 720px) 100vw, (max-width: 1100px) 50vw, 33vw" unoptimized={images[imageIndex].startsWith("https://")} />
+        </button>
         <span className="category-pill">{item.category}</span>
         {item.unavailable && <span className="unavailable-pill">Снято с публикации</span>}
         {viewed && !item.unavailable && <span className="viewed-pill"><Eye size={13} /> Просмотрено</span>}
-      </button>
+        {images.length > 1 && <>
+          <button className="gallery-arrow gallery-arrow-left" onClick={() => moveImage(-1)} aria-label="Предыдущее фото"><ChevronLeft /></button>
+          <button className="gallery-arrow gallery-arrow-right" onClick={() => moveImage(1)} aria-label="Следующее фото"><ChevronRight /></button>
+          <span className="gallery-count">{imageIndex + 1} / {images.length}</span>
+        </>}
+      </div>
       <div className="card-content">
         <div className="card-topline"><strong>{item.price}</strong><span><MapPin size={13} /> {item.location}</span></div>
         <button className="card-title" onClick={onOpen}>{item.title}</button>
@@ -277,6 +296,7 @@ function ListingCard({ item, viewed, liked, own, onOpen, onLike }: { item: Listi
         <button className={liked ? "liked" : ""} disabled={own || item.unavailable} onClick={onLike} title={own ? "Это ваше предложение — свои объявления лайкать нельзя" : "Лайк"}><Heart size={16} fill={liked ? "currentColor" : "none"} /> {own ? "Ваше" : item.likes + Number(liked)}</button>
         <button onClick={onOpen}><MessageCircle size={16} /> {item.comments}</button>
         <span><Eye size={16} /> {item.views.toLocaleString("ru-RU")}</span>
+        {!item.unavailable && <a className="card-avito-link" href={item.sourceUrl} target="_blank" rel="noreferrer" title="Открыть на Avito"><ExternalLink size={15} /></a>}
         <button className="open-card" onClick={onOpen}><ArrowRight size={17} /></button>
       </div>
     </article>
@@ -292,6 +312,28 @@ function ListingDrawer({ item, liked, own, viewerAvatar, comments, onClose, onLi
   const [reportReason, setReportReason] = useState("");
   const [reportError, setReportError] = useState("");
   const [reporting, setReporting] = useState(false);
+  const images = item.images?.length ? item.images : [item.image];
+  const [imageIndex, setImageIndex] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [zoom, setZoom] = useState(1);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        if (lightboxOpen) setLightboxOpen(false);
+        else onClose();
+      }
+      if (event.key === "ArrowLeft" && images.length > 1) setImageIndex((current) => (current - 1 + images.length) % images.length);
+      if (event.key === "ArrowRight" && images.length > 1) setImageIndex((current) => (current + 1) % images.length);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [images.length, lightboxOpen, onClose]);
+
+  function moveImage(direction: -1 | 1) {
+    setImageIndex((current) => (current + direction + images.length) % images.length);
+    setZoom(1);
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -320,7 +362,18 @@ function ListingDrawer({ item, liked, own, viewerAvatar, comments, onClose, onLi
     <div className="drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <aside className="listing-drawer" role="dialog" aria-modal="true" aria-label={item.title}>
         <button className="drawer-close" onClick={onClose} aria-label="Закрыть"><X /></button>
-        <div className="drawer-image"><Image src={item.image} alt="" fill sizes="700px" unoptimized={item.image.startsWith("https://")} />{item.unavailable && <div className="drawer-unavailable">Снято с публикации</div>}</div>
+        <div className="drawer-image">
+          <button className="drawer-image-open" onClick={() => { setZoom(1); setLightboxOpen(true); }} aria-label="Увеличить фотографию">
+            <Image src={images[imageIndex]} alt={`${item.title}, фото ${imageIndex + 1}`} fill sizes="700px" unoptimized={images[imageIndex].startsWith("https://")} />
+            <span><Maximize2 size={16} /> Увеличить</span>
+          </button>
+          {images.length > 1 && <>
+            <button className="gallery-arrow gallery-arrow-left" onClick={() => moveImage(-1)} aria-label="Предыдущее фото"><ChevronLeft /></button>
+            <button className="gallery-arrow gallery-arrow-right" onClick={() => moveImage(1)} aria-label="Следующее фото"><ChevronRight /></button>
+            <span className="gallery-count">{imageIndex + 1} / {images.length}</span>
+          </>}
+          {item.unavailable && <div className="drawer-unavailable">Снято с публикации</div>}
+        </div>
         <div className="drawer-body">
           <div className="drawer-meta"><span>{item.category}</span><span><MapPin size={14} /> {item.location}</span><span><Eye size={14} /> {item.views.toLocaleString("ru-RU")}</span></div>
           <h2>{item.title}</h2>
@@ -351,6 +404,12 @@ function ListingDrawer({ item, liked, own, viewerAvatar, comments, onClose, onLi
           </div>
         </div>
         {reportTarget && <div className="drawer-report-layer"><form className="drawer-report" onSubmit={submitReport}><button type="button" className="drawer-close" onClick={() => setReportTarget(null)} aria-label="Закрыть"><X /></button><span className="section-kicker">ЖАЛОБА</span><h3>{reportTarget.type === "comment" ? "Что не так с комментарием?" : "Что не так с карточкой?"}</h3><p>Жалоба попадёт в закрытую очередь модераторов.</p><textarea autoFocus rows={5} maxLength={500} value={reportReason} onChange={(event) => setReportReason(event.target.value)} placeholder="Опишите нарушение или ошибку" />{reportError && <small>{reportError}</small>}<div><button type="button" className="button button-ghost" onClick={() => setReportTarget(null)}>Отмена</button><button className="button button-primary" disabled={reportReason.trim().length < 5 || reporting}>{reporting ? "Отправляем…" : "Отправить"}</button></div></form></div>}
+        {lightboxOpen && <div className="gallery-lightbox" role="dialog" aria-modal="true" aria-label={`Фотографии ${item.title}`} onMouseDown={(event) => { if (event.target === event.currentTarget) setLightboxOpen(false); }}>
+          <button className="gallery-lightbox-close" onClick={() => setLightboxOpen(false)} aria-label="Закрыть"><X /></button>
+          <div className="gallery-lightbox-toolbar"><button onClick={() => setZoom((value) => Math.max(1, value - .5))} disabled={zoom <= 1} aria-label="Уменьшить"><Minus /></button><span>{Math.round(zoom * 100)}%</span><button onClick={() => setZoom((value) => Math.min(3, value + .5))} disabled={zoom >= 3} aria-label="Увеличить"><Plus /></button></div>
+          <div className="gallery-lightbox-scroll"><div style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%` }}><Image src={images[imageIndex]} alt={`${item.title}, фото ${imageIndex + 1}`} fill sizes="100vw" unoptimized={images[imageIndex].startsWith("https://")} /></div></div>
+          {images.length > 1 && <><button className="gallery-lightbox-arrow is-left" onClick={() => moveImage(-1)} aria-label="Предыдущее фото"><ChevronLeft /></button><button className="gallery-lightbox-arrow is-right" onClick={() => moveImage(1)} aria-label="Следующее фото"><ChevronRight /></button><span className="gallery-lightbox-count">{imageIndex + 1} / {images.length}</span></>}
+        </div>}
       </aside>
     </div>
   );

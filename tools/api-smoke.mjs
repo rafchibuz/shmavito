@@ -109,6 +109,7 @@ async function main() {
   const category = await db.category.findFirst({ where: { isVisible: true, deletedAt: null } });
   invariant(category, "Smoke test requires a visible category");
   const smokeSourceUrl = `https://www.avito.ru/moskva/telefony/smoke_${runId}_9999999999`;
+  const smokeImages = Array.from({ length: 12 }, (_, index) => `https://example.com/shmavito-${runId}-${index}.jpg`);
   const submissionPayload = await request("/api/submissions", {
     token: viewerToken,
     method: "POST",
@@ -119,7 +120,7 @@ async function main() {
       description: "Temporary moderation flow check",
       price: 123456,
       city: "Москва",
-      imageUrls: [],
+      imageUrls: smokeImages,
       importMode: "automatic",
     },
     expected: 201,
@@ -129,6 +130,7 @@ async function main() {
   const queuedSubmission = moderationQueue.submissions.find((item) => item.id === submissionPayload.submission.id);
   invariant(queuedSubmission?.sourceUrl === smokeSourceUrl, "Moderation queue missed the source URL");
   invariant(queuedSubmission?.rawSnapshot?.title === `Smoke listing ${runId}`, "Moderation queue missed imported fields");
+  invariant(queuedSubmission?.rawSnapshot?.imageUrls?.length === smokeImages.length, "Moderation queue truncated the gallery");
   const approved = await request(`/api/admin/submissions/${submissionPayload.submission.id}/decision`, {
     token: moderatorToken,
     method: "POST",
@@ -143,7 +145,7 @@ async function main() {
   });
   createdListingIds.push(approved.listing.id);
   const catalogAfterApproval = await request("/api/listings");
-  invariant(catalogAfterApproval.listings.some((item) => item.id === approved.listing.id && item.title.includes("edited")), "Approved listing did not reach the public catalog");
+  invariant(catalogAfterApproval.listings.some((item) => item.id === approved.listing.id && item.title.includes("edited") && item.images?.length === smokeImages.length), "Approved listing or its full gallery did not reach the public catalog");
 
   const authenticatedCatalog = await request("/api/listings", { token: viewerToken });
   invariant(authenticatedCatalog.viewer?.id === viewer.id, "Authenticated viewer was not returned");
@@ -158,7 +160,8 @@ async function main() {
     invariant(imported.mode === "automatic", `Avito import did not finish automatically: ${JSON.stringify(imported)}`);
     invariant(imported.title && imported.description, "Avito import missed title or description");
     invariant(imported.price > 0 && imported.city, "Avito import missed price or city");
-    invariant(imported.imageUrls?.length > 0, "Avito import missed listing images");
+    const minimumImages = Math.max(1, Number(process.env.SMOKE_EXPECT_MIN_IMAGES) || 1);
+    invariant(imported.imageUrls?.length >= minimumImages, `Avito import returned fewer than ${minimumImages} listing images`);
     console.log(`Avito import passed: ${imported.title}; ${imported.price} ₽; ${imported.city}; ${imported.imageUrls.length} image(s).`);
   }
 

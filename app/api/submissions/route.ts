@@ -9,10 +9,10 @@ const submissionSchema = z.object({
   sourceUrl: z.string().min(1).max(2048),
   categoryId: z.string().min(1),
   title: z.string().trim().min(2).max(160).optional(),
-  description: z.string().trim().max(4000).optional(),
+  description: z.string().trim().max(12_000).optional(),
   price: z.number().int().nonnegative().max(2_000_000_000).nullable().optional(),
   city: z.string().trim().max(100).optional(),
-  imageUrls: z.array(z.url()).max(5).optional(),
+  imageUrls: z.array(z.url()).max(40).optional(),
   importMode: z.enum(["automatic", "manual"]).nullable().optional(),
 });
 

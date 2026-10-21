@@ -86,6 +86,7 @@ $env:SMOKE_AVITO_IMPORT="1"; pnpm test:smoke; Remove-Item Env:SMOKE_AVITO_IMPORT
 ```
 
 Конкретную ссылку можно передать через переменную `SMOKE_AVITO_URL`.
+Минимальное ожидаемое число фотографий задаётся через `SMOKE_EXPECT_MIN_IMAGES`.
 
 ## Текущий этап
 
