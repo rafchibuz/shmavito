@@ -9,6 +9,8 @@ const decisionSchema = z.object({
   rejectionReason: z.string().trim().max(500).optional(),
   categoryId: z.string().min(1).optional(),
   title: z.string().trim().min(2).max(160).optional(),
+  originalTitle: z.string().trim().min(2).max(160).optional(),
+  submitterComment: z.string().trim().min(2).max(280).optional(),
   description: z.string().trim().max(12_000).optional(),
   price: z.number().int().nonnegative().max(2_000_000_000).nullable().optional(),
   city: z.string().trim().max(100).nullable().optional(),
@@ -69,6 +71,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
       const snapshot = snapshotObject(submission.rawSnapshot);
       const title = input.title || (typeof snapshot.title === "string" ? snapshot.title : "Объявление Avito");
+      const originalTitle = input.originalTitle || (typeof snapshot.originalTitle === "string" ? snapshot.originalTitle : title);
+      const submitterComment = input.submitterComment || (typeof snapshot.submitterComment === "string" ? snapshot.submitterComment : null);
       const description = input.description ?? (typeof snapshot.description === "string" ? snapshot.description : "");
       const price = input.price !== undefined
         ? input.price
@@ -85,6 +89,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           submissionId: submission.id,
           categoryId,
           title,
+          originalTitle,
+          submitterComment,
           description,
           price,
           city,

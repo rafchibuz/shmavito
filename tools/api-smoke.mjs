@@ -117,6 +117,8 @@ async function main() {
       sourceUrl: smokeSourceUrl,
       categoryId: category.id,
       title: `Smoke listing ${runId}`,
+      originalTitle: `Original Avito title ${runId}`,
+      submitterComment: "Worth showing on stream",
       description: "Temporary moderation flow check",
       price: 123456,
       city: "Москва",
@@ -130,6 +132,8 @@ async function main() {
   const queuedSubmission = moderationQueue.submissions.find((item) => item.id === submissionPayload.submission.id);
   invariant(queuedSubmission?.sourceUrl === smokeSourceUrl, "Moderation queue missed the source URL");
   invariant(queuedSubmission?.rawSnapshot?.title === `Smoke listing ${runId}`, "Moderation queue missed imported fields");
+  invariant(queuedSubmission?.rawSnapshot?.originalTitle === `Original Avito title ${runId}`, "Moderation queue missed the original Avito title");
+  invariant(queuedSubmission?.rawSnapshot?.submitterComment === "Worth showing on stream", "Moderation queue missed the submitter comment");
   invariant(queuedSubmission?.rawSnapshot?.imageUrls?.length === smokeImages.length, "Moderation queue truncated the gallery");
   const approved = await request(`/api/admin/submissions/${submissionPayload.submission.id}/decision`, {
     token: moderatorToken,
@@ -138,6 +142,8 @@ async function main() {
       decision: "APPROVED",
       categoryId: category.id,
       title: `Smoke listing edited ${runId}`,
+      originalTitle: `Original title edited ${runId}`,
+      submitterComment: "Moderator checked this comment",
       description: "Edited by moderator",
       price: 120000,
       city: "Москва",
@@ -145,7 +151,7 @@ async function main() {
   });
   createdListingIds.push(approved.listing.id);
   const catalogAfterApproval = await request("/api/listings");
-  invariant(catalogAfterApproval.listings.some((item) => item.id === approved.listing.id && item.title.includes("edited") && item.images?.length === smokeImages.length), "Approved listing or its full gallery did not reach the public catalog");
+  invariant(catalogAfterApproval.listings.some((item) => item.id === approved.listing.id && item.title.includes("edited") && item.originalTitle.includes("edited") && item.submitterComment.includes("Moderator") && item.images?.length === smokeImages.length), "Approved listing copy or its full gallery did not reach the public catalog");
 
   const authenticatedCatalog = await request("/api/listings", { token: viewerToken });
   invariant(authenticatedCatalog.viewer?.id === viewer.id, "Authenticated viewer was not returned");

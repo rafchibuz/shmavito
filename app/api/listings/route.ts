@@ -40,6 +40,8 @@ export async function GET(request: Request) {
         ...(query ? {
           OR: [
             { title: { contains: query, mode: "insensitive" } },
+            { originalTitle: { contains: query, mode: "insensitive" } },
+            { submitterComment: { contains: query, mode: "insensitive" } },
             { description: { contains: query, mode: "insensitive" } },
             { city: { contains: query, mode: "insensitive" } },
           ],
@@ -71,6 +73,8 @@ export async function GET(request: Request) {
       listings: listings.map((listing) => ({
         id: listing.id,
         title: listing.title,
+        originalTitle: listing.originalTitle || listing.title,
+        submitterComment: listing.submitterComment || "",
         price: formatPrice(listing.price),
         location: listing.city || "Город не указан",
         category: listing.category.name,

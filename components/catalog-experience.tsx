@@ -50,6 +50,8 @@ export function CatalogExperience() {
   const [category, setCategory] = useState<Category>("Все");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("new");
+  const [city, setCity] = useState("Все города");
+  const [availability, setAvailability] = useState<"all" | "active" | "unavailable">("all");
   const [unseenOnly, setUnseenOnly] = useState(false);
   const [viewed, setViewed] = useState<string[]>([]);
   const [liked, setLiked] = useState<string[]>([]);
@@ -99,9 +101,11 @@ export function CatalogExperience() {
     const normalized = query.trim().toLowerCase();
     const result = catalogListings.filter((item) => {
       const categoryMatch = category === "Все" || item.category === category;
-      const queryMatch = !normalized || `${item.title} ${item.description} ${item.location}`.toLowerCase().includes(normalized);
+      const queryMatch = !normalized || `${item.title} ${item.originalTitle || ""} ${item.submitterComment || ""} ${item.description} ${item.location}`.toLowerCase().includes(normalized);
+      const cityMatch = city === "Все города" || item.location === city;
+      const availabilityMatch = availability === "all" || (availability === "unavailable" ? item.unavailable : !item.unavailable);
       const unseenMatch = !unseenOnly || !viewed.includes(item.id);
-      return categoryMatch && queryMatch && unseenMatch;
+      return categoryMatch && queryMatch && cityMatch && availabilityMatch && unseenMatch;
     });
     return result.toSorted((a, b) => {
       if (sort === "popular") return b.likes + Number(liked.includes(b.id)) - (a.likes + Number(liked.includes(a.id)));
@@ -109,7 +113,9 @@ export function CatalogExperience() {
       if (sort === "old") return catalogListings.indexOf(b) - catalogListings.indexOf(a);
       return catalogListings.indexOf(a) - catalogListings.indexOf(b);
     });
-  }, [catalogListings, category, liked, query, sort, unseenOnly, viewed]);
+  }, [availability, catalogListings, category, city, liked, query, sort, unseenOnly, viewed]);
+
+  const cities = useMemo(() => ["Все города", ...[...new Set(catalogListings.map((item) => item.location).filter(Boolean))].toSorted((a, b) => a.localeCompare(b, "ru"))], [catalogListings]);
 
   function persistViewed(next: string[]) {
     setViewed(next);
@@ -234,6 +240,8 @@ export function CatalogExperience() {
             {query && <button onClick={() => setQuery("")} aria-label="Очистить поиск"><X size={16} /></button>}
           </label>
           <label className="select-box"><SlidersHorizontal size={17} /><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="new">Сначала новые</option><option value="popular">Популярные</option><option value="discussed">Обсуждаемые</option><option value="old">Сначала старые</option></select><ChevronDown size={15} /></label>
+          <label className="select-box"><MapPin size={17} /><select value={city} onChange={(event) => setCity(event.target.value)} aria-label="Фильтр по городу">{cities.map((item) => <option value={item} key={item}>{item}</option>)}</select><ChevronDown size={15} /></label>
+          <label className="select-box"><Eye size={17} /><select value={availability} onChange={(event) => setAvailability(event.target.value as "all" | "active" | "unavailable")} aria-label="Фильтр по доступности"><option value="all">Все объявления</option><option value="active">Только активные</option><option value="unavailable">Снятые с публикации</option></select><ChevronDown size={15} /></label>
           <label className="check-chip"><input type="checkbox" checked={unseenOnly} onChange={(event) => setUnseenOnly(event.target.checked)} /><span /> Только непросмотренные</label>
         </div>
 
@@ -241,7 +249,7 @@ export function CatalogExperience() {
           {catalogCategories.map((item) => <button key={item} className={item === category ? "active" : ""} onClick={() => setCategory(item)}>{item}{item !== "Все" && <small>{catalogListings.filter((listing) => listing.category === item).length}</small>}</button>)}
         </div>
 
-        <div className="result-bar"><span>Найдено: <b>{filtered.length}</b></span><span className={`demo-badge ${catalogMode === "live" ? "is-live" : ""}`}>{catalogMode === "live" ? "ЖИВОЙ КАТАЛОГ" : catalogMode === "loading" ? "ЗАГРУЗКА" : "ДЕМО ДО ПЕРВОЙ ПУБЛИКАЦИИ"}</span></div>
+        <div className="result-bar"><span>Найдено: <b>{filtered.length}</b></span></div>
 
         {filtered.length ? (
           <div className="listing-grid">
@@ -250,7 +258,7 @@ export function CatalogExperience() {
             ))}
           </div>
         ) : (
-          <div className="empty-state"><Search size={30} /><h3>Ничего не найдено</h3><p>Попробуйте другой запрос или сбросьте фильтры.</p><button className="button button-ghost" onClick={() => { setCategory("Все"); setQuery(""); setUnseenOnly(false); }}>Сбросить фильтры</button></div>
+          <div className="empty-state"><Search size={30} /><h3>Ничего не найдено</h3><p>Попробуйте другой запрос или сбросьте фильтры.</p><button className="button button-ghost" onClick={() => { setCategory("Все"); setQuery(""); setCity("Все города"); setAvailability("all"); setUnseenOnly(false); }}>Сбросить фильтры</button></div>
         )}
       </main>
 
@@ -287,8 +295,8 @@ function ListingCard({ item, viewed, liked, own, onOpen, onLike }: { item: Listi
         </>}
       </div>
       <div className="card-content">
-        <div className="card-topline"><strong>{item.price}</strong><span><MapPin size={13} /> {item.location}</span></div>
-        <button className="card-title" onClick={onOpen}>{item.title}</button>
+        <div className="card-summary"><div className="card-title-stack"><button className="card-title" onClick={onOpen}>{item.title}</button><p className="card-original-title">{item.originalTitle || item.title}</p></div><div className="card-price-location"><strong>{item.price}</strong><span><MapPin size={13} /> {item.location}</span></div></div>
+        {item.submitterComment && <button className="card-submit-comment" onClick={onOpen}>«{item.submitterComment}»</button>}
         {(item.year || item.mileage) && <div className="spec-row">{item.year && <span>{item.year} год</span>}{item.mileage && <span>{item.mileage}</span>}</div>}
         <div className="author-row"><span className="avatar"><Image src={item.author.avatar} alt="" width={30} height={30} /></span><div><b>{item.author.name}</b><small>{item.published}</small></div><BadgeCheck size={15} /></div>
       </div>
@@ -296,8 +304,8 @@ function ListingCard({ item, viewed, liked, own, onOpen, onLike }: { item: Listi
         <button className={liked ? "liked" : ""} disabled={own || item.unavailable} onClick={onLike} title={own ? "Это ваше предложение — свои объявления лайкать нельзя" : "Лайк"}><Heart size={16} fill={liked ? "currentColor" : "none"} /> {own ? "Ваше" : item.likes + Number(liked)}</button>
         <button onClick={onOpen}><MessageCircle size={16} /> {item.comments}</button>
         <span><Eye size={16} /> {item.views.toLocaleString("ru-RU")}</span>
-        {!item.unavailable && <a className="card-avito-link" href={item.sourceUrl} target="_blank" rel="noreferrer" title="Открыть на Avito"><ExternalLink size={15} /></a>}
-        <button className="open-card" onClick={onOpen}><ArrowRight size={17} /></button>
+        <button className="open-card" onClick={onOpen}>Подробнее <ArrowRight size={15} /></button>
+        {!item.unavailable && <a className="card-avito-link" href={item.sourceUrl} target="_blank" rel="noreferrer">На Avito <ExternalLink size={15} /></a>}
       </div>
     </article>
   );
@@ -377,7 +385,10 @@ function ListingDrawer({ item, liked, own, viewerAvatar, comments, onClose, onLi
         <div className="drawer-body">
           <div className="drawer-meta"><span>{item.category}</span><span><MapPin size={14} /> {item.location}</span><span><Eye size={14} /> {item.views.toLocaleString("ru-RU")}</span></div>
           <h2>{item.title}</h2>
+          <p className="drawer-original-title">Оригинал на Avito: {item.originalTitle || item.title}</p>
           <div className="drawer-price">{item.price}</div>
+          {item.submitterComment && <div className="drawer-submitter-comment"><small>Комментарий автора</small><p>«{item.submitterComment}»</p></div>}
+          <h3 className="drawer-description-title">Описание на Avito</h3>
           <p className="drawer-description">{item.description}</p>
           <div className="drawer-author"><span className="avatar"><Image src={item.author.avatar} alt="" width={38} height={38} /></span><div><small>Предложил</small><strong>{item.author.name}</strong></div><BadgeCheck size={16} /></div>
           <div className="drawer-actions">

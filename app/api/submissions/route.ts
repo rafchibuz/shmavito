@@ -8,7 +8,9 @@ import { extractExternalItemId, normalizeAvitoUrl } from "@/lib/submissions";
 const submissionSchema = z.object({
   sourceUrl: z.string().min(1).max(2048),
   categoryId: z.string().min(1),
-  title: z.string().trim().min(2).max(160).optional(),
+  title: z.string().trim().min(2).max(120),
+  originalTitle: z.string().trim().min(2).max(160),
+  submitterComment: z.string().trim().min(2).max(280),
   description: z.string().trim().max(12_000).optional(),
   price: z.number().int().nonnegative().max(2_000_000_000).nullable().optional(),
   city: z.string().trim().max(100).optional(),
@@ -65,6 +67,8 @@ export async function POST(request: Request) {
 
     const rawSnapshot = {
       title: input.title ?? null,
+      originalTitle: input.originalTitle,
+      submitterComment: input.submitterComment,
       description: input.description ?? null,
       price: input.price ?? null,
       city: input.city ?? null,

@@ -4,6 +4,8 @@ export const listings: Listing[] = [
   {
     id: "m5-stealth",
     title: "BMW M5 G90 в матовом карбоне",
+    originalTitle: "BMW M5, 2025",
+    submitterComment: "Полный карбон и почти без пробега — это точно надо увидеть на стриме.",
     price: "28 900 000 ₽",
     location: "Краснодар",
     category: "Автомобили",
@@ -21,6 +23,8 @@ export const listings: Listing[] = [
   {
     id: "lada-night",
     title: "ВАЗ 21099 — живая капсула времени",
+    originalTitle: "ВАЗ 21099, 2003",
+    submitterComment: "Та самая девяносто девятая, только будто только что выехала из нулевых.",
     price: "415 000 ₽",
     location: "Ростов-на-Дону",
     category: "Автомобили",
@@ -38,6 +42,8 @@ export const listings: Listing[] = [
   {
     id: "bmw-side",
     title: "Кованые диски R21 комплект",
+    originalTitle: "Диски кованые R21 BMW разноширокие",
+    submitterComment: "Хром, разноширокая резина и цена как у отдельной машины.",
     price: "640 000 ₽",
     location: "Москва",
     category: "Запчасти",
@@ -53,6 +59,8 @@ export const listings: Listing[] = [
   {
     id: "garage-box",
     title: "Тёплый гараж 28 м² в охраняемом ГСК",
+    originalTitle: "Гараж, 28 м²",
+    submitterComment: "Вариант для проекта: машина, инструмент и ещё место останется.",
     price: "1 750 000 ₽",
     location: "Краснодар",
     category: "Недвижимость",
@@ -68,6 +76,8 @@ export const listings: Listing[] = [
   {
     id: "track-suit",
     title: "Гоночная экипировка, полный комплект",
+    originalTitle: "Комплект гоночной экипировки",
+    submitterComment: "Можно сразу собираться на трек — даже перчатки уже в комплекте.",
     price: "120 000 ₽",
     location: "Сочи",
     category: "Разное",
@@ -83,6 +93,8 @@ export const listings: Listing[] = [
   {
     id: "old-bike",
     title: "Мотоцикл для проекта, документы есть",
+    originalTitle: "Мотоцикл под восстановление",
+    submitterComment: "Не на ходу, зато с документами и большим потенциалом для проекта.",
     price: "185 000 ₽",
     location: "Ставрополь",
     category: "Другая техника",

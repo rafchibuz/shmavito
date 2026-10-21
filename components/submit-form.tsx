@@ -24,6 +24,8 @@ export function SubmitForm() {
   const [category, setCategory] = useState("");
   const [loading, setLoading] = useState(false);
   const [title, setTitle] = useState("");
+  const [originalTitle, setOriginalTitle] = useState("");
+  const [submitterComment, setSubmitterComment] = useState("");
   const [price, setPrice] = useState("");
   const [city, setCity] = useState("");
   const [description, setDescription] = useState("");
@@ -68,7 +70,8 @@ export function SubmitForm() {
       const payload = await response.json() as ImportPayload;
       if (!response.ok) throw new Error(payload.message || "Не удалось прочитать объявление.");
       setUrl(payload.normalizedUrl);
-      setTitle(payload.title);
+      setTitle("");
+      setOriginalTitle(payload.title);
       setDescription(payload.description);
       setPrice(payload.price === null ? "" : payload.price.toLocaleString("ru-RU"));
       setCity(payload.city);
@@ -126,6 +129,8 @@ export function SubmitForm() {
                   sourceUrl: url,
                   categoryId: category,
                   title,
+                  originalTitle,
+                  submitterComment,
                   description,
                   price: Number(price.replace(/\D/g, "")) || null,
                   city,
@@ -148,11 +153,12 @@ export function SubmitForm() {
             <h1>Всё выглядит правильно?</h1>
             <p className="lead">{importMode === "automatic" ? "Мы получили доступные данные объявления. Проверьте их перед отправкой." : "Автоматический доступ ограничен. Заполните основные данные вручную."}</p>
             {importWarning && <div className="info-box import-warning"><span className="info-mark" aria-hidden="true">!</span><div><strong>{importMode === "automatic" ? "Импорт выполнен частично" : "Ручной режим"}</strong><p>{importWarning}</p></div></div>}
-            <div className="import-preview"><div className={`upload-placeholder ${imageUrls[0] ? "has-image" : ""}`} style={imageUrls[0] ? { backgroundImage: `linear-gradient(rgba(8,10,13,.08),rgba(8,10,13,.5)), url(${JSON.stringify(imageUrls[0]).slice(1, -1)})` } : undefined}>{!imageUrls[0] && <ImagePlus />}<span>{imageUrls[0] ? "Фото с Avito" : "Фото не получено"}</span><small>{imageUrls.length ? `${imageUrls.length} фото импортировано` : "Модератор увидит ссылку"}</small></div><div className="preview-fields"><label className="field"><span>Название <b>*</b></span><input required minLength={2} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Название объявления" /></label><div className="field-pair"><label className="field"><span>Цена, ₽</span><input inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="Не указана" /></label><label className="field"><span>Город</span><input value={city} onChange={(event) => setCity(event.target.value)} placeholder="Не указан" /></label></div></div></div>
-            <label className="field"><span>Описание</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={5} /></label>
+            <div className="import-preview"><div className={`upload-placeholder ${imageUrls[0] ? "has-image" : ""}`} style={imageUrls[0] ? { backgroundImage: `linear-gradient(rgba(8,10,13,.08),rgba(8,10,13,.5)), url(${JSON.stringify(imageUrls[0]).slice(1, -1)})` } : undefined}>{!imageUrls[0] && <ImagePlus />}<span>{imageUrls[0] ? "Фото с Avito" : "Фото не получено"}</span><small>{imageUrls.length ? `${imageUrls.length} фото импортировано` : "Модератор увидит ссылку"}</small></div><div className="preview-fields"><label className="field"><span>Ваше название <b>*</b></span><input required minLength={2} maxLength={120} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Например: RAM для самого громкого выезда" /><small>Это название увидят первым на карточке.</small></label><label className="field"><span>Оригинальное название на Avito <b>*</b></span><input required minLength={2} maxLength={160} value={originalTitle} onChange={(event) => setOriginalTitle(event.target.value)} placeholder="Название из объявления" /></label><div className="field-pair"><label className="field"><span>Цена, ₽</span><input inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="Не указана" /></label><label className="field"><span>Город</span><input value={city} onChange={(event) => setCity(event.target.value)} placeholder="Не указан" /></label></div></div></div>
+            <label className="field"><span>Ваш мини-комментарий <b>*</b></span><textarea required minLength={2} maxLength={280} value={submitterComment} onChange={(event) => setSubmitterComment(event.target.value)} rows={3} placeholder="Почему это объявление стоит показать STEEL?" /><small>{submitterComment.length}/280</small></label>
+            <label className="field"><span>Полное описание с Avito</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={7} /></label>
             <label className="rules-check"><input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} /><span><Check size={14} /></span><p>Я подтверждаю, что предложение не нарушает правила, не содержит запрещённых товаров и персональных данных.</p></label>
             {error && <div className="info-box form-error"><ShieldCheck size={20} /><div><strong>Не удалось отправить</strong><p>{error}</p></div></div>}
-            <button className="button button-primary form-submit" disabled={!agreed || !title.trim() || loading}>{loading ? <><LoaderCircle className="spin" size={18} /> Отправляем…</> : <>Отправить на модерацию <ArrowRight size={18} /></>}</button>
+            <button className="button button-primary form-submit" disabled={!agreed || !title.trim() || !originalTitle.trim() || !submitterComment.trim() || loading}>{loading ? <><LoaderCircle className="spin" size={18} /> Отправляем…</> : <>Отправить на модерацию <ArrowRight size={18} /></>}</button>
           </form>
         )}
       </section>

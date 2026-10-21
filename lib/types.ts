@@ -3,6 +3,8 @@ export type Category = string;
 export type Listing = {
   id: string;
   title: string;
+  originalTitle?: string;
+  submitterComment?: string;
   price: string;
   location: string;
   category: Category;

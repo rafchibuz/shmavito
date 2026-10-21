@@ -24,7 +24,7 @@ import { ReactNode, useCallback, useEffect, useState } from "react";
 import { SiteHeader } from "@/components/site-header";
 
 type Section = "overview" | "moderation" | "categories" | "comments" | "reports" | "users" | "audit" | "settings";
-type QueueItem = { id: string; title: string; description: string; price: number | null; city: string; sourceUrl: string; author: string; category: string; categoryId: string; time: string; image: string; imageUrls: string[] };
+type QueueItem = { id: string; title: string; originalTitle: string; submitterComment: string; description: string; price: number | null; city: string; sourceUrl: string; author: string; category: string; categoryId: string; time: string; image: string; imageUrls: string[] };
 type ApiCategory = { id: string; name: string; slug: string; position: number; isVisible: boolean };
 type ApiUser = { id: string; login: string; displayName: string; avatarUrl: string | null; role: "USER" | "MODERATOR" | "FOUNDER"; status: "ACTIVE" | "BLOCKED"; createdAt: string; _count: { submissions: number; comments: number } };
 type AuditItem = { id: string; action: string; targetType: string; targetId: string; createdAt: string; actor: { login: string; displayName: string } | null };
@@ -90,6 +90,8 @@ export function AdminDashboard() {
         return {
           id: submission.id,
           title: typeof snapshot.title === "string" ? snapshot.title : "Новое объявление Avito",
+          originalTitle: typeof snapshot.originalTitle === "string" ? snapshot.originalTitle : typeof snapshot.title === "string" ? snapshot.title : "Новое объявление Avito",
+          submitterComment: typeof snapshot.submitterComment === "string" ? snapshot.submitterComment : "",
           description: typeof snapshot.description === "string" ? snapshot.description : "",
           price: typeof snapshot.price === "number" ? snapshot.price : null,
           city: typeof snapshot.city === "string" ? snapshot.city : "",
@@ -178,7 +180,7 @@ function QueuePanel({ queue, mode, notify, onQueueChange, displayLimit }: { queu
   async function decide(item: QueueItem, decision: "APPROVED" | "REJECTED", rejectionReason?: string) {
     setBusyId(item.id);
     try {
-      await api(`/api/admin/submissions/${encodeURIComponent(item.id)}/decision`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision, rejectionReason, categoryId: item.categoryId, title: item.title, description: item.description, price: item.price, city: item.city || null }) });
+      await api(`/api/admin/submissions/${encodeURIComponent(item.id)}/decision`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision, rejectionReason, categoryId: item.categoryId, title: item.title, originalTitle: item.originalTitle, submitterComment: item.submitterComment || undefined, description: item.description, price: item.price, city: item.city || null }) });
       onQueueChange(queue.filter((value) => value.id !== item.id));
       setRejecting(null); setReason(""); notify(decision === "APPROVED" ? "Заявка опубликована" : "Заявка отклонена");
     } catch (error) { notify(error instanceof Error ? error.message : "Ошибка модерации"); } finally { setBusyId(""); }
@@ -191,13 +193,15 @@ function QueuePanel({ queue, mode, notify, onQueueChange, displayLimit }: { queu
     <div className="moderation-fields">
       <div className="moderation-meta"><span>#{item.id.slice(-6).toUpperCase()}</span><span>от <b>{item.author}</b> • {item.time} назад</span></div>
       <a className="moderation-source" href={item.sourceUrl} target="_blank" rel="noreferrer">Открыть исходное объявление на Avito <ExternalLink size={14} /></a>
-      <label><span>Название</span><input value={item.title} maxLength={160} onChange={(event) => updateItem(item.id, { title: event.target.value })} /></label>
+      <label><span>Название от автора</span><input value={item.title} maxLength={120} onChange={(event) => updateItem(item.id, { title: event.target.value })} /></label>
+      <label><span>Оригинальное название на Avito</span><input value={item.originalTitle} maxLength={160} onChange={(event) => updateItem(item.id, { originalTitle: event.target.value })} /></label>
       <div className="moderation-field-row">
         <label><span>Категория</span><select value={item.categoryId} onChange={(event) => changeCategory(item.id, event.target.value)}>{categories.length ? categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>) : <option value={item.categoryId}>{item.category}</option>}</select></label>
         <label><span>Цена, ₽</span><input type="number" min={0} value={item.price ?? ""} onChange={(event) => updateItem(item.id, { price: event.target.value ? Number(event.target.value) : null })} /></label>
         <label><span>Город</span><input value={item.city} maxLength={100} onChange={(event) => updateItem(item.id, { city: event.target.value })} /></label>
       </div>
-      <label><span>Описание</span><textarea rows={6} maxLength={12000} value={item.description} onChange={(event) => updateItem(item.id, { description: event.target.value })} /></label>
+      <label><span>Комментарий автора</span><textarea rows={3} maxLength={280} value={item.submitterComment} onChange={(event) => updateItem(item.id, { submitterComment: event.target.value })} /></label>
+      <label><span>Полное описание с Avito</span><textarea rows={7} maxLength={12000} value={item.description} onChange={(event) => updateItem(item.id, { description: event.target.value })} /></label>
       <div className="moderation-decisions"><button className="approve" disabled={busyId === item.id || item.title.trim().length < 2} onClick={() => decide(item, "APPROVED")}><Check /> Одобрить и опубликовать</button><button className="reject" disabled={busyId === item.id} onClick={() => setRejecting(item)}><X /> Отклонить</button></div>
     </div>
   </article>)}</div> : <AdminEmpty icon={<Check />} title="Очередь разобрана" text="Новых заявок пока нет." />}{rejecting && <div className="moderation-backdrop"><section className="moderation-modal" role="dialog" aria-modal="true"><button className="drawer-close" onClick={() => setRejecting(null)} aria-label="Закрыть"><X /></button><span className="section-kicker">ОТКЛОНЕНИЕ</span><h2>{rejecting.title}</h2><p>Автор увидит эту причину.</p><label className="field"><span>Причина <b>*</b></span><textarea autoFocus rows={4} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} /></label><div className="moderation-modal-actions"><button className="button button-ghost" onClick={() => setRejecting(null)}>Отмена</button><button className="button button-primary" disabled={!reason.trim() || busyId === rejecting.id} onClick={() => decide(rejecting, "REJECTED", reason.trim())}>Отклонить</button></div></section></div>}</section>;
