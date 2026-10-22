@@ -2,8 +2,9 @@ import { SubmissionStatus } from "@prisma/client";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { ApiError, apiErrorResponse, assertSameOrigin } from "@/lib/http";
-import { extractExternalItemId, normalizeAvitoUrl } from "@/lib/submissions";
+import { ApiError, apiErrorResponse, assertSameOrigin, readJsonBody } from "@/lib/http";
+import { enforceRateLimit } from "@/lib/rate-limit";
+import { extractExternalItemId, isTrustedAvitoImageUrl, normalizeAvitoUrl } from "@/lib/submissions";
 
 const submissionSchema = z.object({
   sourceUrl: z.string().min(1).max(2048),
@@ -14,7 +15,7 @@ const submissionSchema = z.object({
   description: z.string().trim().max(12_000).optional(),
   price: z.number().int().nonnegative().max(2_000_000_000).nullable().optional(),
   city: z.string().trim().max(100).optional(),
-  imageUrls: z.array(z.url()).max(40).optional(),
+  imageUrls: z.array(z.url().refine(isTrustedAvitoImageUrl, "Разрешены только изображения Avito.")).max(40).optional(),
   importMode: z.enum(["automatic", "manual"]).nullable().optional(),
 });
 
@@ -46,7 +47,8 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const user = await requireUser();
-    const input = submissionSchema.parse(await request.json());
+    await enforceRateLimit(request, { namespace: "submission:create", subject: user.id, limit: 8, windowSeconds: 10 * 60 });
+    const input = submissionSchema.parse(await readJsonBody(request));
     const normalizedUrl = normalizeAvitoUrl(input.sourceUrl);
 
     const [category, limitSetting, pendingCount, duplicate] = await Promise.all([
@@ -80,7 +82,7 @@ export async function POST(request: Request) {
         data: {
           authorId: user.id,
           categoryId: category.id,
-          sourceUrl: input.sourceUrl,
+          sourceUrl: normalizedUrl,
           normalizedUrl,
           externalItemId: extractExternalItemId(normalizedUrl),
           rawSnapshot,

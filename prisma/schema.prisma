@@ -191,6 +191,8 @@ model AvailabilityCheck {
   errorCode  String?
   durationMs Int?
   checkedAt  DateTime @default(now())
+
+  @@index([listingId, checkedAt])
 }
 
 model Report {
@@ -235,4 +237,13 @@ model Setting {
   value     Json
   updatedBy String?
   updatedAt DateTime @updatedAt
+}
+
+model RateLimitBucket {
+  key       String   @id
+  count     Int      @default(1)
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
 }

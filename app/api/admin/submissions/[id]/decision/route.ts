@@ -2,7 +2,7 @@ import { ListingState, SubmissionStatus } from "@prisma/client";
 import { z } from "zod";
 import { requireModerator } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { ApiError, apiErrorResponse, assertSameOrigin } from "@/lib/http";
+import { ApiError, apiErrorResponse, assertSameOrigin, readJsonBody } from "@/lib/http";
 
 const decisionSchema = z.object({
   decision: z.enum(["APPROVED", "REJECTED"]),
@@ -30,7 +30,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   try {
     assertSameOrigin(request);
     const moderator = await requireModerator();
-    const input = decisionSchema.parse(await request.json());
+    const input = decisionSchema.parse(await readJsonBody(request));
     const { id } = await context.params;
 
     const result = await db.$transaction(async (tx) => {

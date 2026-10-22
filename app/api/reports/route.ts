@@ -2,7 +2,8 @@ import { ReportStatus } from "@prisma/client";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { ApiError, apiErrorResponse, assertSameOrigin } from "@/lib/http";
+import { ApiError, apiErrorResponse, assertSameOrigin, readJsonBody } from "@/lib/http";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const reportSchema = z.object({
   targetType: z.enum(["listing", "comment"]),
@@ -14,7 +15,8 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const user = await requireUser();
-    const input = reportSchema.parse(await request.json());
+    await enforceRateLimit(request, { namespace: "report:create", subject: user.id, limit: 10, windowSeconds: 60 * 60 });
+    const input = reportSchema.parse(await readJsonBody(request, 8 * 1024));
     const listing = input.targetType === "listing"
       ? await db.listing.findFirst({ where: { id: input.targetId, deletedAt: null }, select: { id: true } })
       : null;

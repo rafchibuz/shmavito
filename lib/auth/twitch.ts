@@ -1,4 +1,5 @@
 import { UserRole } from "@prisma/client";
+import { z } from "zod";
 import { db } from "@/lib/db";
 
 type TwitchTokenResponse = {
@@ -15,6 +16,21 @@ type TwitchUser = {
   display_name: string;
   profile_image_url: string;
 };
+
+const tokenResponseSchema = z.object({
+  access_token: z.string().min(1),
+  expires_in: z.number().int().positive(),
+  refresh_token: z.string(),
+  scope: z.array(z.string()),
+  token_type: z.string().min(1),
+});
+
+const twitchUserSchema = z.object({
+  id: z.string().min(1),
+  login: z.string().min(1),
+  display_name: z.string().min(1),
+  profile_image_url: z.url().or(z.literal("")),
+});
 
 export function twitchConfig() {
   const clientId = process.env.TWITCH_CLIENT_ID;
@@ -40,9 +56,10 @@ export async function exchangeTwitchCode(code: string) {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
     cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error(`Twitch token exchange failed (${response.status}).`);
-  return (await response.json()) as TwitchTokenResponse;
+  return tokenResponseSchema.parse(await response.json()) as TwitchTokenResponse;
 }
 
 export async function fetchTwitchUser(accessToken: string) {
@@ -51,11 +68,12 @@ export async function fetchTwitchUser(accessToken: string) {
   const response = await fetch("https://api.twitch.tv/helix/users", {
     headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": config.clientId },
     cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error(`Twitch user request failed (${response.status}).`);
-  const payload = (await response.json()) as { data: TwitchUser[] };
+  const payload = z.object({ data: z.array(twitchUserSchema).max(1) }).parse(await response.json());
   if (!payload.data[0]) throw new Error("Twitch did not return a user profile.");
-  return payload.data[0];
+  return payload.data[0] as TwitchUser;
 }
 
 export async function upsertTwitchUser(profile: TwitchUser) {

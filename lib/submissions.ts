@@ -24,3 +24,16 @@ export function extractExternalItemId(normalizedUrl: string) {
   const matches = new URL(normalizedUrl).pathname.match(/(\d{6,})(?:$|\/)/g);
   return matches?.at(-1)?.replace("/", "") ?? null;
 }
+
+export function isTrustedAvitoImageUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    return url.protocol === "https:" && (
+      hostname.endsWith(".img.avito.st")
+      || ((hostname === "www.avito.ru" || hostname === "avito.ru") && url.pathname.startsWith("/img/share/"))
+    );
+  } catch {
+    return false;
+  }
+}

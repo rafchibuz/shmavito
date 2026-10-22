@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { requireModerator } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { apiErrorResponse, assertSameOrigin } from "@/lib/http";
+import { apiErrorResponse, assertSameOrigin, readJsonBody } from "@/lib/http";
 
 const categorySchema = z.object({
   name: z.string().trim().min(2).max(60),
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const moderator = await requireModerator();
-    const input = categorySchema.parse(await request.json());
+    const input = categorySchema.parse(await readJsonBody(request));
     const category = await db.$transaction(async (tx) => {
       const created = await tx.category.create({ data: input });
       await tx.auditLog.create({

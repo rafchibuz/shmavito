@@ -2,7 +2,7 @@ import { ListingState, ReportStatus } from "@prisma/client";
 import { z } from "zod";
 import { requireModerator } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { ApiError, apiErrorResponse, assertSameOrigin } from "@/lib/http";
+import { ApiError, apiErrorResponse, assertSameOrigin, readJsonBody } from "@/lib/http";
 
 const reportDecisionSchema = z.union([
   z.object({ status: z.enum([ReportStatus.RESOLVED, ReportStatus.DISMISSED]) }),
@@ -13,7 +13,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   try {
     assertSameOrigin(request);
     const moderator = await requireModerator();
-    const input = reportDecisionSchema.parse(await request.json());
+    const input = reportDecisionSchema.parse(await readJsonBody(request));
     const { id } = await context.params;
     const report = await db.report.findUnique({ where: { id }, include: { comment: true, listing: true } });
     if (!report) throw new ApiError(404, "NOT_FOUND", "Жалоба не найдена.");

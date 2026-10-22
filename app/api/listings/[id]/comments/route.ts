@@ -2,7 +2,8 @@ import { ListingState } from "@prisma/client";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { ApiError, apiErrorResponse, assertSameOrigin } from "@/lib/http";
+import { ApiError, apiErrorResponse, assertSameOrigin, readJsonBody } from "@/lib/http";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const commentSchema = z.object({
   body: z.string().trim().min(1).max(500),
@@ -36,7 +37,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   try {
     assertSameOrigin(request);
     const user = await requireUser();
-    const input = commentSchema.parse(await request.json());
+    await enforceRateLimit(request, { namespace: "comment:create", subject: user.id, limit: 20, windowSeconds: 60 });
+    const input = commentSchema.parse(await readJsonBody(request, 8 * 1024));
     const { id } = await context.params;
     const listing = await db.listing.findFirst({ where: { id, deletedAt: null }, select: { state: true } });
     if (!listing) throw new ApiError(404, "NOT_FOUND", "Объявление не найдено.");

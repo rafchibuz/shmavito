@@ -2,7 +2,7 @@ import { UserRole } from "@prisma/client";
 import { z } from "zod";
 import { requireFounder } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { ApiError, apiErrorResponse, assertSameOrigin } from "@/lib/http";
+import { ApiError, apiErrorResponse, assertSameOrigin, readJsonBody } from "@/lib/http";
 
 const roleSchema = z.object({
   login: z.string().trim().min(2).max(25).transform((value) => value.toLowerCase()),
@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const founder = await requireFounder();
-    const input = roleSchema.parse(await request.json());
+    const input = roleSchema.parse(await readJsonBody(request));
     const target = await db.user.findFirst({ where: { login: input.login }, orderBy: { updatedAt: "desc" } });
     if (!target) {
       throw new ApiError(404, "USER_NOT_FOUND", "Пользователь должен хотя бы один раз войти через Twitch.");

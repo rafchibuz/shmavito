@@ -1,5 +1,5 @@
 import { ApiError } from "@/lib/http";
-import { normalizeAvitoUrl } from "@/lib/submissions";
+import { isTrustedAvitoImageUrl, normalizeAvitoUrl } from "@/lib/submissions";
 
 const MAX_HTML_BYTES = 3 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -185,17 +185,6 @@ function cleanMarkdown(value: string, maxLength: number) {
     .replace(/[*_`>#]/g, ""), maxLength);
 }
 
-function isAvitoListingImage(value: string) {
-  try {
-    const url = new URL(value);
-    const hostname = url.hostname.toLowerCase();
-    return hostname.endsWith(".img.avito.st")
-      || ((hostname === "www.avito.ru" || hostname === "avito.ru") && url.pathname.startsWith("/img/share/"));
-  } catch {
-    return false;
-  }
-}
-
 function parseReaderMarkdown(markdown: string, normalizedUrl: string, metadataImages: string[] = [], structuredTitle = "", structuredImages: string[] = []): AvitoImportResult | null {
   const titleLine = structuredTitle || (
     markdown.match(/^Title:\s*(.+)$/mi)?.[1]
@@ -214,7 +203,7 @@ function parseReaderMarkdown(markdown: string, normalizedUrl: string, metadataIm
   const price = priceMatch ? parsePrice(priceMatch[1]) : null;
 
   const imageUrls = [...new Set([...structuredImages, ...metadataImages].map(safeImageUrl)
-    .filter((value): value is string => value !== null && isAvitoListingImage(value)))].slice(0, MAX_IMAGES);
+    .filter((value): value is string => value !== null && isTrustedAvitoImageUrl(value)))].slice(0, MAX_IMAGES);
   let city = "";
   const imagePattern = /!\[([^\]]*)\]\((https:\/\/[^)\s]+)\)/gi;
   for (const match of markdown.matchAll(imagePattern)) {

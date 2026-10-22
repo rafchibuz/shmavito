@@ -11,6 +11,7 @@ import {
   Flag,
   LayoutDashboard,
   MessageSquare,
+  RefreshCw,
   Save,
   Search,
   Settings,
@@ -234,9 +235,19 @@ function AuditPanel() {
 
 function SettingsPanel({ notify }: { notify: (message: string) => void }) {
   const [limit, setLimit] = useState(3);
+  const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState<{ checked: number; available: number; unavailable: number; errors: number } | null>(null);
   useEffect(() => { api<{ limit: number }>("/api/admin/settings/submission-limit").then((value) => setLimit(value.limit)).catch(() => undefined); }, []);
   async function save() { try { await api("/api/admin/settings/submission-limit", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ limit }) }); notify("Лимит сохранён"); } catch (error) { notify(error instanceof Error ? error.message : "Ошибка"); } }
-  return <section className="admin-card settings-form"><span className="section-kicker">ПРЕДЛОЖЕНИЯ</span><h2>Лимит активных заявок</h2><p>Сколько заявок со статусом «На проверке» может одновременно иметь один пользователь.</p><label className="field"><span>Количество</span><input type="number" min={1} max={100} value={limit} onChange={(event) => setLimit(Number(event.target.value))} /></label><button className="button button-primary" onClick={save}><Save /> Сохранить</button></section>;
+  async function checkAvailability() {
+    setChecking(true);
+    try {
+      const result = await api<{ checked: number; available: number; unavailable: number; errors: number }>("/api/admin/availability", { method: "POST" });
+      setCheckResult(result);
+      notify(`Проверено объявлений: ${result.checked}`);
+    } catch (error) { notify(error instanceof Error ? error.message : "Ошибка проверки"); } finally { setChecking(false); }
+  }
+  return <div className="settings-grid"><section className="admin-card settings-form"><span className="section-kicker">ПРЕДЛОЖЕНИЯ</span><h2>Лимит активных заявок</h2><p>Сколько заявок со статусом «На проверке» может одновременно иметь один пользователь.</p><label className="field"><span>Количество</span><input type="number" min={1} max={100} value={limit} onChange={(event) => setLimit(Number(event.target.value))} /></label><button className="button button-primary" onClick={save}><Save /> Сохранить</button></section><section className="admin-card settings-form"><span className="section-kicker">НАДЁЖНОСТЬ</span><h2>Доступность объявлений</h2><p>Ежедневная задача проверяет активные ссылки. Недоступные объявления остаются в каталоге серыми с пометкой «Снято с публикации».</p>{checkResult && <div className="availability-result"><span>Проверено <b>{checkResult.checked}</b></span><span>Доступно <b>{checkResult.available}</b></span><span>Снято <b>{checkResult.unavailable}</b></span><span>Ошибки <b>{checkResult.errors}</b></span></div>}<button className="button button-primary" disabled={checking} onClick={checkAvailability}><RefreshCw className={checking ? "spin" : ""} /> {checking ? "Проверяем…" : "Проверить сейчас"}</button></section></div>;
 }
 
 function CommentsPanel({ notify }: { notify: (message: string) => void }) {

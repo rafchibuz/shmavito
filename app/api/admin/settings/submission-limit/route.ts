@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { requireModerator } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { apiErrorResponse, assertSameOrigin } from "@/lib/http";
+import { apiErrorResponse, assertSameOrigin, readJsonBody } from "@/lib/http";
 
 const settingSchema = z.object({ limit: z.number().int().min(1).max(100) });
 
@@ -19,7 +19,7 @@ export async function PUT(request: Request) {
   try {
     assertSameOrigin(request);
     const moderator = await requireModerator();
-    const { limit } = settingSchema.parse(await request.json());
+    const { limit } = settingSchema.parse(await readJsonBody(request));
     const previous = await db.setting.findUnique({ where: { key: "submissions.activeLimit" } });
     await db.$transaction([
       db.setting.upsert({

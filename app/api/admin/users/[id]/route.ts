@@ -2,7 +2,7 @@ import { UserRole, UserStatus } from "@prisma/client";
 import { z } from "zod";
 import { requireModerator } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { ApiError, apiErrorResponse, assertSameOrigin } from "@/lib/http";
+import { ApiError, apiErrorResponse, assertSameOrigin, readJsonBody } from "@/lib/http";
 
 const userPatchSchema = z.object({
   role: z.enum([UserRole.USER, UserRole.MODERATOR]).optional(),
@@ -13,7 +13,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   try {
     assertSameOrigin(request);
     const actor = await requireModerator();
-    const input = userPatchSchema.parse(await request.json());
+    const input = userPatchSchema.parse(await readJsonBody(request));
     const { id } = await context.params;
     const target = await db.user.findUnique({ where: { id } });
     if (!target) throw new ApiError(404, "NOT_FOUND", "Пользователь не найден.");
