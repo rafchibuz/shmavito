@@ -32,6 +32,7 @@ type AuditItem = { id: string; action: string; targetType: string; targetId: str
 type ApiComment = { id: string; body: string; createdAt: string; author: { login: string; displayName: string; avatarUrl: string | null }; listing: { id: string; title: string; submission: { sourceUrl: string } } };
 type ReportListing = { id: string; title: string; submission: { sourceUrl: string } };
 type ApiReport = { id: string; reason: string; status: "OPEN" | "RESOLVED" | "DISMISSED"; createdAt: string; reporter: { login: string; displayName: string; avatarUrl: string | null }; listing: ReportListing | null; comment: { id: string; body: string; listing: ReportListing } | null };
+type OverviewStats = { pendingCount: number; publishedCount: number; openReportCount: number; availabilityErrors24h: number; lastAvailabilityCheckAt: string | null };
 
 const sectionMeta: Record<Section, { kicker: string; title: string }> = {
   overview: { kicker: "ПАНЕЛЬ УПРАВЛЕНИЯ", title: "Добрый вечер, Раф" },
@@ -71,6 +72,7 @@ export function AdminDashboard() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [queueMode, setQueueMode] = useState<"loading" | "live" | "auth" | "error">("loading");
   const [reportCount, setReportCount] = useState(0);
+  const [overviewStats, setOverviewStats] = useState<OverviewStats | null>(null);
   const [toast, setToast] = useState("");
   const meta = sectionMeta[section];
 
@@ -111,6 +113,16 @@ export function AdminDashboard() {
     } catch { setQueueMode("error"); }
   }, []);
 
+  const loadOverview = useCallback(async () => {
+    try {
+      const stats = await api<OverviewStats>("/api/admin/overview");
+      setOverviewStats(stats);
+      setReportCount(stats.openReportCount);
+    } catch {
+      setOverviewStats(null);
+    }
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadQueue(); }, 0);
     return () => window.clearTimeout(timer);
@@ -121,6 +133,11 @@ export function AdminDashboard() {
       .then((value) => setReportCount(value.reports.length))
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadOverview(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadOverview, queue.length, reportCount]);
 
   return (
     <div className="site-page interior admin-screen">
@@ -136,7 +153,7 @@ export function AdminDashboard() {
             <div className="admin-search"><Search /><input placeholder="Поиск по панели" /><kbd>⌘ K</kbd></div>
           </div>
 
-          {section === "overview" && <Overview queue={queue} queueMode={queueMode} reportCount={reportCount} notify={notify} onQueueChange={setQueue} onOpenQueue={() => setSection("moderation")} />}
+          {section === "overview" && <Overview queue={queue} queueMode={queueMode} reportCount={reportCount} stats={overviewStats} notify={notify} onQueueChange={setQueue} onOpenQueue={() => setSection("moderation")} />}
           {section === "moderation" && <QueuePanel queue={queue} mode={queueMode} notify={notify} onQueueChange={setQueue} />}
           {section === "categories" && <CategoriesPanel notify={notify} />}
           {section === "comments" && <CommentsPanel notify={notify} />}
@@ -156,8 +173,11 @@ function AdminNav({ section, queueCount, reportCount, onSelect }: { section: Sec
   return <div className="admin-nav-groups"><div><span>УПРАВЛЕНИЕ</span>{item("overview", <LayoutDashboard />, "Обзор")}{item("moderation", <FileClock />, "Модерация", queueCount)}{item("categories", <Tags />, "Категории")}{item("comments", <MessageSquare />, "Комментарии")}{item("reports", <Flag />, "Жалобы", reportCount)}</div><div><span>СИСТЕМА</span>{item("users", <Users />, "Пользователи")}{item("audit", <Shield />, "Журнал действий")}{item("settings", <Settings />, "Настройки")}</div></div>;
 }
 
-function Overview({ queue, queueMode, reportCount, notify, onQueueChange, onOpenQueue }: { queue: QueueItem[]; queueMode: "loading" | "live" | "auth" | "error"; reportCount: number; notify: (message: string) => void; onQueueChange: (items: QueueItem[]) => void; onOpenQueue: () => void }) {
-  return <><div className="admin-metrics"><Metric icon={<Clock3 />} value={queue.length.toString()} label="ждут проверки" detail="живая очередь" accent="amber" /><Metric icon={<Eye />} value="—" label="опубликовано" detail="из базы каталога" accent="green" /><Metric icon={<Flag />} value={reportCount.toString()} label="новые жалобы" detail={reportCount ? "нужна проверка" : "очередь чиста"} accent="red" /><Metric icon={<CircleAlert />} value="0" label="ошибок проверки" detail="за последние сутки" accent="blue" /></div><QueuePanel queue={queue} displayLimit={5} mode={queueMode} notify={notify} onQueueChange={onQueueChange} /><div className="admin-section-actions"><button className="button button-ghost" onClick={onOpenQueue}>Открыть всю модерацию</button></div></>;
+function Overview({ queue, queueMode, reportCount, stats, notify, onQueueChange, onOpenQueue }: { queue: QueueItem[]; queueMode: "loading" | "live" | "auth" | "error"; reportCount: number; stats: OverviewStats | null; notify: (message: string) => void; onQueueChange: (items: QueueItem[]) => void; onOpenQueue: () => void }) {
+  const lastCheckDetail = stats?.lastAvailabilityCheckAt
+    ? `последняя: ${new Date(stats.lastAvailabilityCheckAt).toLocaleString("ru-RU")}`
+    : "проверок пока не было";
+  return <><div className="admin-metrics"><Metric icon={<Clock3 />} value={(stats?.pendingCount ?? queue.length).toString()} label="ждут проверки" detail="живая очередь" accent="amber" /><Metric icon={<Eye />} value={stats?.publishedCount.toString() ?? "—"} label="опубликовано" detail="включая снятые с Avito" accent="green" /><Metric icon={<Flag />} value={reportCount.toString()} label="новые жалобы" detail={reportCount ? "нужна проверка" : "очередь чиста"} accent="red" /><Metric icon={<CircleAlert />} value={stats?.availabilityErrors24h.toString() ?? "—"} label="ошибок проверки" detail={lastCheckDetail} accent="blue" /></div><QueuePanel queue={queue} displayLimit={5} mode={queueMode} notify={notify} onQueueChange={onQueueChange} /><div className="admin-section-actions"><button className="button button-ghost" onClick={onOpenQueue}>Открыть всю модерацию</button></div></>;
 }
 
 function QueuePanel({ queue, mode, notify, onQueueChange, displayLimit }: { queue: QueueItem[]; mode: "loading" | "live" | "auth" | "error"; notify: (message: string) => void; onQueueChange: (items: QueueItem[]) => void; displayLimit?: number }) {

@@ -109,7 +109,10 @@ async function main() {
   const category = await db.category.findFirst({ where: { isVisible: true, deletedAt: null } });
   invariant(category, "Smoke test requires a visible category");
   const smokeSourceUrl = `https://www.avito.ru/moskva/telefony/smoke_${runId}_9999999999`;
-  const smokeImages = Array.from({ length: 12 }, (_, index) => `https://example.com/shmavito-${runId}-${index}.jpg`);
+  const smokeImages = Array.from(
+    { length: 12 },
+    (_, index) => `https://00.img.avito.st/image/1/shmavito-${runId}-${index}.jpg`,
+  );
   const submissionPayload = await request("/api/submissions", {
     token: viewerToken,
     method: "POST",
@@ -152,6 +155,9 @@ async function main() {
   createdListingIds.push(approved.listing.id);
   const catalogAfterApproval = await request("/api/listings");
   invariant(catalogAfterApproval.listings.some((item) => item.id === approved.listing.id && item.title.includes("edited") && item.originalTitle.includes("edited") && item.submitterComment.includes("Moderator") && item.images?.length === smokeImages.length), "Approved listing copy or its full gallery did not reach the public catalog");
+  const overview = await request("/api/admin/overview", { token: moderatorToken });
+  invariant(overview.publishedCount >= 1, "Admin overview did not count published listings");
+  invariant(Number.isInteger(overview.pendingCount) && Number.isInteger(overview.availabilityErrors24h), "Admin overview returned invalid metrics");
 
   const authenticatedCatalog = await request("/api/listings", { token: viewerToken });
   invariant(authenticatedCatalog.viewer?.id === viewer.id, "Authenticated viewer was not returned");
