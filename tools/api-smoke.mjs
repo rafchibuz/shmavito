@@ -170,8 +170,8 @@ async function main() {
       body: { sourceUrl: avitoSmokeUrl },
     });
     invariant(imported.mode === "automatic", `Avito import did not finish automatically: ${JSON.stringify(imported)}`);
-    invariant(imported.title && imported.description, "Avito import missed title or description");
-    invariant(imported.price > 0 && imported.city, "Avito import missed price or city");
+    invariant(imported.title && imported.description, `Avito import missed title or description: ${JSON.stringify(imported)}`);
+    invariant(imported.price > 0 && imported.city, `Avito import missed price or city: ${JSON.stringify(imported)}`);
     const minimumImages = Math.max(1, Number(process.env.SMOKE_EXPECT_MIN_IMAGES) || 1);
     invariant(imported.imageUrls?.length >= minimumImages, `Avito import returned fewer than ${minimumImages} listing images`);
     console.log(`Avito import passed: ${imported.title}; ${imported.price} ₽; ${imported.city}; ${imported.imageUrls.length} image(s).`);

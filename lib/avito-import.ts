@@ -177,6 +177,41 @@ function manualResult(normalizedUrl: string, warning: string): AvitoImportResult
   return { mode: "manual", normalizedUrl, title: "", description: "", price: null, city: "", imageUrls: [], importedFields: [], warning };
 }
 
+function importedFieldNames(result: Pick<AvitoImportResult, "title" | "description" | "price" | "city" | "imageUrls">) {
+  return [
+    result.title && "title",
+    result.description && "description",
+    result.price !== null && "price",
+    result.city && "city",
+    result.imageUrls.length && "images",
+  ].filter((value): value is string => Boolean(value));
+}
+
+function mergeAutomaticResults(primary: AvitoImportResult, fallback: AvitoImportResult): AvitoImportResult {
+  if (fallback.mode !== "automatic") return primary;
+
+  const merged = {
+    title: primary.title || fallback.title,
+    description: primary.description || fallback.description,
+    price: primary.price ?? fallback.price,
+    city: primary.city || fallback.city,
+    imageUrls: [...new Set([...primary.imageUrls, ...fallback.imageUrls])]
+      .filter(isTrustedAvitoImageUrl)
+      .slice(0, MAX_IMAGES),
+  };
+  const importedFields = importedFieldNames(merged);
+
+  return {
+    mode: "automatic",
+    normalizedUrl: primary.normalizedUrl,
+    ...merged,
+    importedFields,
+    warning: importedFields.length < 5
+      ? "Часть данных Avito не удалось получить автоматически. Проверьте заполненные поля перед отправкой."
+      : null,
+  };
+}
+
 function cleanMarkdown(value: string, maxLength: number) {
   return cleanText(value
     .replace(/!\[[^\]]*\]\([^\n)]+\)/g, "")
@@ -217,8 +252,7 @@ function parseReaderMarkdown(markdown: string, normalizedUrl: string, metadataIm
     if (imageUrls.length >= MAX_IMAGES && city) break;
   }
 
-  const importedFields = [title && "title", description && "description", price !== null && "price", city && "city", imageUrls.length && "images"]
-    .filter((value): value is string => Boolean(value));
+  const importedFields = importedFieldNames({ title, description, price, city, imageUrls });
   return {
     mode: "automatic",
     normalizedUrl,
@@ -320,12 +354,11 @@ export async function importAvitoListing(sourceUrl: string): Promise<AvitoImport
   const imageUrls = [...new Set(imageCandidates.flatMap((value) => {
     if (isRecord(value)) return [safeImageUrl(value.url ?? value.contentUrl)];
     return [safeImageUrl(value)];
-  }).filter((value): value is string => Boolean(value)))].slice(0, MAX_IMAGES);
+  }).filter((value): value is string => value !== null && isTrustedAvitoImageUrl(value)))].slice(0, MAX_IMAGES);
 
-  const importedFields = [title && "title", description && "description", price !== null && "price", city && "city", imageUrls.length && "images"].filter((value): value is string => Boolean(value));
   if (!title) return importThroughReader(currentUrl, "Avito открыл страницу, но не отдал название объявления. Заполните данные вручную.");
 
-  return {
+  const directResult: AvitoImportResult = {
     mode: "automatic",
     normalizedUrl: currentUrl,
     title,
@@ -333,7 +366,20 @@ export async function importAvitoListing(sourceUrl: string): Promise<AvitoImport
     price,
     city,
     imageUrls,
-    importedFields,
-    warning: importedFields.length < 4 ? "Часть данных Avito не отдал. Проверьте и дополните поля перед отправкой." : null,
+    importedFields: importedFieldNames({ title, description, price, city, imageUrls }),
+    warning: null,
   };
+
+  const needsEnrichment = !description || price === null || !city || imageUrls.length < 2;
+  if (!needsEnrichment) return directResult;
+
+  const readerResult = await importThroughReader(
+    currentUrl,
+    "Часть данных Avito не удалось получить автоматически. Проверьте заполненные поля перед отправкой.",
+  );
+  const enrichedResult = mergeAutomaticResults(directResult, readerResult);
+  if (enrichedResult.importedFields.length < 5) {
+    enrichedResult.warning = "Часть данных Avito не удалось получить автоматически. Проверьте заполненные поля перед отправкой.";
+  }
+  return enrichedResult;
 }
