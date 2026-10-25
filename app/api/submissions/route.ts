@@ -23,7 +23,7 @@ export async function GET() {
   try {
     const user = await requireUser();
     const submissions = await db.submission.findMany({
-      where: { authorId: user.id, status: { not: SubmissionStatus.DELETED } },
+      where: { authorId: user.id },
       orderBy: { createdAt: "desc" },
       include: {
         category: { select: { id: true, name: true, slug: true } },

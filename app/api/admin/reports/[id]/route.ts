@@ -33,10 +33,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
             },
           });
         } else if (report.listingId && report.listing && report.listing.state !== ListingState.DELETED) {
-          await tx.listing.update({
-            where: { id: report.listingId },
+          const changed = await tx.listing.updateMany({
+            where: { id: report.listingId, state: { not: ListingState.DELETED }, deletedAt: null },
             data: { state: ListingState.UNAVAILABLE, unavailableAt: new Date() },
           });
+          if (!changed.count) throw new ApiError(409, "CONTENT_ALREADY_REMOVED", "Материал уже удалён или недоступен.");
           await tx.auditLog.create({
             data: {
               actorId: moderator.id,

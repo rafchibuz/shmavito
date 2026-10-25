@@ -128,14 +128,14 @@ export async function runAvailabilityChecks({ limit = 20, force = false, actorId
             checkedAt,
           },
         });
-        await tx.listing.update({
-          where: { id: listing.id },
+        const updated = await tx.listing.updateMany({
+          where: { id: listing.id, state: ListingState.ACTIVE, deletedAt: null },
           data: {
             lastCheckedAt: checkedAt,
             ...(check.result === "UNAVAILABLE" ? { state: ListingState.UNAVAILABLE, unavailableAt: checkedAt } : {}),
           },
         });
-        if (check.result === "UNAVAILABLE") {
+        if (updated.count && check.result === "UNAVAILABLE") {
           await tx.auditLog.create({
             data: {
               actorId,

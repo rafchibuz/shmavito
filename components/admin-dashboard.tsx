@@ -10,6 +10,7 @@ import {
   FileClock,
   Flag,
   LayoutDashboard,
+  ListFilter,
   MessageSquare,
   RefreshCw,
   Save,
@@ -23,9 +24,10 @@ import {
 } from "lucide-react";
 import { ReactNode, useCallback, useEffect, useState } from "react";
 import { SiteHeader } from "@/components/site-header";
+import { AdminListingsPanel } from "@/components/admin-listings-panel";
 import { SocialLinksSettings } from "@/components/social-links-settings";
 
-type Section = "overview" | "moderation" | "categories" | "comments" | "reports" | "users" | "audit" | "settings";
+type Section = "overview" | "moderation" | "listings" | "categories" | "comments" | "reports" | "users" | "audit" | "settings";
 type QueueItem = { id: string; title: string; originalTitle: string; submitterComment: string; description: string; price: number | null; city: string; sourceUrl: string; author: string; category: string; categoryId: string; time: string; image: string; imageUrls: string[] };
 type ApiCategory = { id: string; name: string; slug: string; position: number; isVisible: boolean };
 type ApiUser = { id: string; login: string; displayName: string; avatarUrl: string | null; role: "USER" | "MODERATOR" | "FOUNDER"; status: "ACTIVE" | "BLOCKED"; createdAt: string; _count: { submissions: number; comments: number } };
@@ -38,6 +40,7 @@ type OverviewStats = { pendingCount: number; publishedCount: number; openReportC
 const sectionMeta: Record<Section, { kicker: string; title: string }> = {
   overview: { kicker: "ПАНЕЛЬ УПРАВЛЕНИЯ", title: "Добрый вечер, Раф" },
   moderation: { kicker: "МОДЕРАЦИЯ", title: "Очередь предложений" },
+  listings: { kicker: "КАТАЛОГ", title: "Объявления" },
   categories: { kicker: "СТРУКТУРА КАТАЛОГА", title: "Категории" },
   comments: { kicker: "СООБЩЕСТВО", title: "Комментарии" },
   reports: { kicker: "БЕЗОПАСНОСТЬ", title: "Жалобы" },
@@ -156,6 +159,7 @@ export function AdminDashboard() {
 
           {section === "overview" && <Overview queue={queue} queueMode={queueMode} reportCount={reportCount} stats={overviewStats} notify={notify} onQueueChange={setQueue} onOpenQueue={() => setSection("moderation")} />}
           {section === "moderation" && <QueuePanel queue={queue} mode={queueMode} notify={notify} onQueueChange={setQueue} />}
+          {section === "listings" && <AdminListingsPanel notify={notify} onChanged={() => { void loadOverview(); }} />}
           {section === "categories" && <CategoriesPanel notify={notify} />}
           {section === "comments" && <CommentsPanel notify={notify} />}
           {section === "reports" && <ReportsPanel notify={notify} onCountChange={setReportCount} />}
@@ -171,7 +175,7 @@ export function AdminDashboard() {
 
 function AdminNav({ section, queueCount, reportCount, onSelect }: { section: Section; queueCount: number; reportCount: number; onSelect: (section: Section) => void }) {
   const item = (id: Section, icon: ReactNode, label: string, count?: number) => <button className={section === id ? "active" : ""} onClick={() => onSelect(id)}>{icon}{label}{Boolean(count) && <b>{count}</b>}</button>;
-  return <div className="admin-nav-groups"><div><span>УПРАВЛЕНИЕ</span>{item("overview", <LayoutDashboard />, "Обзор")}{item("moderation", <FileClock />, "Модерация", queueCount)}{item("categories", <Tags />, "Категории")}{item("comments", <MessageSquare />, "Комментарии")}{item("reports", <Flag />, "Жалобы", reportCount)}</div><div><span>СИСТЕМА</span>{item("users", <Users />, "Пользователи")}{item("audit", <Shield />, "Журнал действий")}{item("settings", <Settings />, "Настройки")}</div></div>;
+  return <div className="admin-nav-groups"><div><span>УПРАВЛЕНИЕ</span>{item("overview", <LayoutDashboard />, "Обзор")}{item("moderation", <FileClock />, "Модерация", queueCount)}{item("listings", <ListFilter />, "Объявления")}{item("categories", <Tags />, "Категории")}{item("comments", <MessageSquare />, "Комментарии")}{item("reports", <Flag />, "Жалобы", reportCount)}</div><div><span>СИСТЕМА</span>{item("users", <Users />, "Пользователи")}{item("audit", <Shield />, "Журнал действий")}{item("settings", <Settings />, "Настройки")}</div></div>;
 }
 
 function Overview({ queue, queueMode, reportCount, stats, notify, onQueueChange, onOpenQueue }: { queue: QueueItem[]; queueMode: "loading" | "live" | "auth" | "error"; reportCount: number; stats: OverviewStats | null; notify: (message: string) => void; onQueueChange: (items: QueueItem[]) => void; onOpenQueue: () => void }) {

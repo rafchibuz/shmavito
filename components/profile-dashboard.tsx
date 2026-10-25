@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Bell, Check, CheckCircle2, Clock3, Heart, LoaderCircle, MessageCircle, Plus, Shield, XCircle } from "lucide-react";
+import { Bell, Check, CheckCircle2, Clock3, Heart, LoaderCircle, MessageCircle, Plus, RotateCcw, Shield, Trash2, XCircle } from "lucide-react";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 
 type SessionUser = {
@@ -97,8 +97,8 @@ export function ProfileDashboard() {
   const filtered = useMemo(() => filter === "ALL" ? submissions : submissions.filter((item) => item.status === filter), [filter, submissions]);
   const stats = useMemo(() => submissions.reduce((total, submission) => ({
     approved: total.approved + Number(submission.status === "APPROVED"),
-    likes: total.likes + (submission.listing?._count.likes || 0),
-    views: total.views + (submission.listing?._count.views || 0),
+    likes: total.likes + (submission.status === "APPROVED" ? submission.listing?._count.likes || 0 : 0),
+    views: total.views + (submission.status === "APPROVED" ? submission.listing?._count.views || 0 : 0),
   }), { approved: 0, likes: 0, views: 0 }), [submissions]);
   const unreadCount = notifications.filter((item) => !item.readAt).length;
 
@@ -121,7 +121,7 @@ export function ProfileDashboard() {
     </section>
     <div className="profile-stats"><div><strong>{submissions.length}</strong><span>предложений</span></div><div><strong>{stats.approved}</strong><span>опубликовано</span></div><div><strong>{stats.likes.toLocaleString("ru-RU")}</strong><span>получено лайков</span></div><div><strong>{stats.views.toLocaleString("ru-RU")}</strong><span>просмотров</span></div></div>
     <div className="profile-grid">
-      <section><div className="block-heading"><div><span className="section-kicker">ИСТОРИЯ</span><h2>Мои предложения</h2></div><select value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}><option value="ALL">Все статусы</option><option value="PENDING">На проверке</option><option value="APPROVED">Опубликовано</option><option value="REJECTED">Отклонено</option></select></div>
+      <section><div className="block-heading"><div><span className="section-kicker">ИСТОРИЯ</span><h2>Мои предложения</h2></div><select value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}><option value="ALL">Все статусы</option><option value="PENDING">На проверке</option><option value="APPROVED">Опубликовано</option><option value="REJECTED">Отклонено</option><option value="DELETED">Удалено</option></select></div>
         {filtered.length ? <div className="submission-list">{filtered.map((item) => { const image = submissionImage(item); return <article key={item.id}><div className="submission-image"><Image src={image} alt="" fill sizes="105px" unoptimized={image.startsWith("https://")} /></div><div className="submission-main"><span>{item.category.name}</span><h3>{submissionTitle(item)}</h3><small>{timeAgo(item.createdAt)} • #{item.id.slice(-6).toUpperCase()}</small>{item.status === "REJECTED" && <p>Причина: {item.rejectionReason || "не указана"}</p>}</div><Status status={item.status} /></article>; })}</div> : <ProfileEmpty title={submissions.length ? "Нет заявок с таким статусом" : "Вы ещё ничего не предложили"} text={submissions.length ? "Выберите другой фильтр." : "Найдите интересное объявление Avito и отправьте его на модерацию."} />}
       </section>
       <aside className="notifications"><div className="block-heading"><div><span className="section-kicker">ЦЕНТР</span><h2><span>Уведомления</span><b className={`notification-count ${unreadCount ? "" : "is-empty"}`} aria-hidden={!unreadCount}>{unreadCount || 0}</b></h2></div><button className={unreadCount ? "" : "is-empty"} onClick={markAllRead} disabled={!unreadCount}><Check size={14} /> Прочитать все</button></div>{notifications.length ? notifications.map((item) => <Notification key={item.id} item={item} submissions={submissions} />) : <ProfileEmpty title="Пока тихо" text="Решения модерации появятся здесь." />}</aside>
@@ -132,6 +132,7 @@ export function ProfileDashboard() {
 function Status({ status }: { status: Submission["status"] }) {
   if (status === "APPROVED") return <div className="status approved"><CheckCircle2 /> Опубликовано</div>;
   if (status === "PENDING") return <div className="status pending"><Clock3 /> На проверке</div>;
+  if (status === "DELETED") return <div className="status rejected"><Trash2 /> Удалено</div>;
   return <div className="status rejected"><XCircle /> Отклонено</div>;
 }
 
@@ -141,8 +142,10 @@ function Notification({ item, submissions }: { item: NotificationItem; submissio
   const title = submission ? submissionTitle(submission) : "Ваше предложение";
   const approved = item.type === "submission.approved";
   const rejected = item.type === "submission.rejected";
-  const icon: ReactNode = approved ? <CheckCircle2 /> : rejected ? <XCircle /> : item.type.includes("comment") ? <MessageCircle /> : item.type.includes("like") ? <Heart /> : <Bell />;
-  return <div className={`notification-item ${!item.readAt ? "unread" : ""}`}><span>{icon}</span><div><strong>{approved ? "Заявка опубликована" : rejected ? "Заявка отклонена" : "Новое событие"}</strong><p>«{title}»{rejected && typeof payload.reason === "string" ? ` — ${payload.reason}` : approved ? " уже в каталоге." : ""}</p><small>{timeAgo(item.createdAt)}</small></div></div>;
+  const deleted = item.type === "submission.deleted";
+  const restored = item.type === "submission.restored";
+  const icon: ReactNode = approved ? <CheckCircle2 /> : rejected ? <XCircle /> : deleted ? <Trash2 /> : restored ? <RotateCcw /> : item.type.includes("comment") ? <MessageCircle /> : item.type.includes("like") ? <Heart /> : <Bell />;
+  return <div className={`notification-item ${!item.readAt ? "unread" : ""}`}><span>{icon}</span><div><strong>{approved ? "Заявка опубликована" : rejected ? "Заявка отклонена" : deleted ? "Объявление удалено" : restored ? "Объявление восстановлено" : "Новое событие"}</strong><p>«{title}»{rejected && typeof payload.reason === "string" ? ` — ${payload.reason}` : approved ? " уже в каталоге." : deleted ? " удалено из каталога." : restored ? " снова в каталоге." : ""}</p><small>{timeAgo(item.createdAt)}</small></div></div>;
 }
 
 function ProfileEmpty({ title, text }: { title: string; text: string }) {

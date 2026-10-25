@@ -478,6 +478,32 @@ a { color: inherit; text-decoration: none; }
 .moderation-source:hover { color: #fff; }
 .full-audit { padding-top: 10px; }
 .admin-section-actions { display: flex; justify-content: flex-end; padding-top: 14px; }
+.managed-listings-total { color: var(--muted); font-size: 11px; }
+.managed-listings-toolbar { display: flex; justify-content: space-between; gap: 16px; padding: 16px 22px; border-bottom: 1px solid var(--line); }
+.managed-listings-tabs { display: flex; gap: 6px; }
+.managed-listings-tabs button { padding: 0 13px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: transparent; cursor: pointer; }
+.managed-listings-tabs button.active { color: #fff; border-color: rgba(237,43,50,.55); background: rgba(237,43,50,.1); }
+.managed-listings-toolbar form { min-width: 260px; height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 7px 0 11px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: #101318; }
+.managed-listings-toolbar form input { min-width: 0; flex: 1; border: 0; outline: 0; color: #fff; background: transparent; font-size: 11px; }
+.managed-listings-toolbar form button { padding: 7px 10px; border: 0; border-radius: 4px; color: #fff; background: #303741; cursor: pointer; font-size: 10px; }
+.managed-listing { display: grid; grid-template-columns: 96px minmax(0,1fr) auto; align-items: center; gap: 18px; padding: 16px 22px; border-bottom: 1px solid var(--line); }
+.managed-listing:last-child { border-bottom: 0; }
+.managed-listing-image { position: relative; width: 96px; height: 96px; border-radius: 6px; overflow: hidden; background: #101318; }
+.managed-listing-image img { object-fit: contain; }
+.managed-listing-info { min-width: 0; }
+.managed-listing-meta { display: flex; gap: 10px; color: var(--red); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.managed-listing-meta span:last-child { color: var(--muted); }
+.managed-listing-info h3 { margin: 6px 0 2px; font-size: 15px; line-height: 1.25; }
+.managed-listing-info p { margin: 0 0 5px; color: #828b95; font-size: 10px; }
+.managed-listing-info small { display: block; color: #a6aeb7; font-size: 10px; }
+.managed-listing-info a { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; color: #9fbde7; font-size: 10px; }
+.managed-listing-actions { align-self: center; }
+.managed-listings-empty { padding: 64px 20px; color: var(--muted); text-align: center; font-size: 12px; }
+.managed-listings-error { margin: 0; padding: 12px 22px; color: #ef747b; font-size: 11px; }
+.managed-listings-error a { display: inline-block; margin-left: 12px; color: #fff; text-decoration: underline; }
+.managed-listings-pagination { display: flex; align-items: center; justify-content: center; gap: 20px; padding: 17px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+.managed-listings-pagination button { padding: 7px 12px; border: 1px solid var(--line); border-radius: 5px; color: #fff; background: transparent; cursor: pointer; }
+.managed-listings-pagination button:disabled { opacity: .4; cursor: default; }
 .filter-button { display: flex; align-items: center; gap: 7px; padding: 8px 11px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--muted); font-size: 10px; }
 .filter-button svg { width: 15px; }
 .queue-list article { display: grid; grid-template-columns: 92px 54px minmax(0,1fr) auto; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
@@ -646,6 +672,12 @@ a { color: inherit; text-decoration: none; }
   .moderation-item { grid-template-columns: 1fr; padding: 12px; }
   .moderation-cover { height: 235px; }
   .moderation-field-row { grid-template-columns: 1fr; }
+  .managed-listings-toolbar { flex-direction: column; }
+  .managed-listings-tabs button { min-height: 38px; }
+  .managed-listings-toolbar form { min-width: 0; }
+  .managed-listing { grid-template-columns: 70px minmax(0,1fr); gap: 12px; padding: 14px; }
+  .managed-listing-image { width: 70px; height: 70px; }
+  .managed-listing-actions { grid-column: 2; }
   .social-settings-row { grid-template-columns: 44px minmax(0,1fr); gap: 10px; }
   .social-settings-icon { width: 42px; height: 42px; }
   .social-settings-fields { grid-template-columns: 1fr; }
