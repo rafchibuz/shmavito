@@ -22,6 +22,29 @@ export type Listing = {
   sourceUrl: string;
 };
 
+export type CatalogStats = {
+  findings: number;
+  pending: number;
+  outboundClicks: number;
+};
+
+export type CatalogViewer = {
+  id: string;
+  login: string;
+  displayName: string;
+  avatarUrl: string | null;
+  likedIds: string[];
+  viewedIds: string[];
+  bookmarkIds: string[];
+};
+
+export type CatalogPayload = {
+  listings: Listing[];
+  total: number;
+  stats: CatalogStats;
+  viewer: CatalogViewer | null;
+};
+
 export type CommentItem = {
   id: string;
   authorId?: string;

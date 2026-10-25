@@ -1,28 +1,6 @@
-import { ListingState } from "@prisma/client";
 import { getSessionUser } from "@/lib/auth/session";
-import { db } from "@/lib/db";
+import { getCatalogPayload } from "@/lib/catalog-data";
 import { apiErrorResponse } from "@/lib/http";
-
-const fallbackImages: Record<string, string> = {
-  cars: "/images/car-lineup.png",
-  "other-vehicles": "/images/motorcycle.svg",
-  "real-estate": "/images/garage.svg",
-  parts: "/images/bmw-wheel.png",
-  misc: "/images/racing-suit.png",
-};
-
-function formatPrice(price: number | null) {
-  return price === null ? "Цена не указана" : `${price.toLocaleString("ru-RU")} ₽`;
-}
-
-function formatPublished(value: Date) {
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(value);
-}
 
 export async function GET(request: Request) {
   try {
@@ -32,86 +10,7 @@ export async function GET(request: Request) {
     const query = url.searchParams.get("q")?.trim().slice(0, 100);
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 60, 1), 100);
 
-    const listings = await db.listing.findMany({
-      where: {
-        state: { in: [ListingState.ACTIVE, ListingState.UNAVAILABLE] },
-        deletedAt: null,
-        ...(category ? { category: { slug: category, deletedAt: null } } : {}),
-        ...(query ? {
-          OR: [
-            { title: { contains: query, mode: "insensitive" } },
-            { originalTitle: { contains: query, mode: "insensitive" } },
-            { submitterComment: { contains: query, mode: "insensitive" } },
-            { description: { contains: query, mode: "insensitive" } },
-            { city: { contains: query, mode: "insensitive" } },
-          ],
-        } : {}),
-      },
-      orderBy: { publishedAt: "desc" },
-      take: limit,
-      include: {
-        category: { select: { name: true, slug: true } },
-        submission: {
-          select: {
-            sourceUrl: true,
-            authorId: true,
-            author: { select: { login: true, displayName: true, avatarUrl: true } },
-          },
-        },
-        images: { orderBy: [{ isCover: "desc" }, { position: "asc" }] },
-        _count: { select: { likes: true, comments: true, views: true } },
-      },
-    });
-
-    const listingIds = listings.map((listing) => listing.id);
-    const [viewerLikes, viewerViews] = user && listingIds.length ? await Promise.all([
-      db.like.findMany({ where: { userId: user.id, listingId: { in: listingIds } }, select: { listingId: true } }),
-      db.itemView.findMany({ where: { userId: user.id, listingId: { in: listingIds } }, select: { listingId: true } }),
-    ]) : [[], []];
-
-    return Response.json({
-      listings: listings.map((listing) => ({
-        id: listing.id,
-        title: listing.title,
-        originalTitle: listing.originalTitle || listing.title,
-        submitterComment: listing.submitterComment || "",
-        price: formatPrice(listing.price),
-        location: listing.city || "Город не указан",
-        category: listing.category.name,
-        categorySlug: listing.category.slug,
-        description: listing.description,
-        image: listing.images[0]?.storageKey.startsWith("public/")
-          ? `/uploads/${listing.images[0].storageKey.slice("public/".length)}`
-          : listing.images[0]?.sourceUrl || fallbackImages[listing.category.slug] || "/images/car-lineup.png",
-        images: listing.images.length
-          ? listing.images.map((image) => image.storageKey.startsWith("public/")
-            ? `/uploads/${image.storageKey.slice("public/".length)}`
-            : image.sourceUrl).filter((image): image is string => Boolean(image))
-          : [fallbackImages[listing.category.slug] || "/images/car-lineup.png"],
-        author: {
-          id: listing.submission.authorId,
-          name: listing.submission.author.displayName || listing.submission.author.login,
-          avatar: listing.submission.author.avatarUrl || "/images/avatar-blackline.svg",
-        },
-        published: formatPublished(listing.publishedAt),
-        likes: listing._count.likes,
-        comments: listing._count.comments,
-        views: listing._count.views,
-        year: listing.year ?? undefined,
-        mileage: listing.mileage === null ? undefined : `${listing.mileage.toLocaleString("ru-RU")} км`,
-        unavailable: listing.state === ListingState.UNAVAILABLE,
-        sourceUrl: listing.submission.sourceUrl,
-      })),
-      total: listings.length,
-      viewer: user ? {
-        id: user.id,
-        login: user.login,
-        displayName: user.displayName,
-        avatarUrl: user.avatarUrl,
-        likedIds: viewerLikes.map((like) => like.listingId),
-        viewedIds: viewerViews.map((view) => view.listingId),
-      } : null,
-    });
+    return Response.json(await getCatalogPayload({ user, category, query, limit }));
   } catch (error) {
     return apiErrorResponse(error);
   }

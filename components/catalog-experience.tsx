@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   BadgeCheck,
+  Bookmark,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -26,12 +27,24 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { categories as demoCategories, initialComments, listings as demoListings } from "@/lib/demo-data";
-import type { Category, CommentItem, Listing } from "@/lib/types";
+import type { CatalogPayload, CatalogStats, CatalogViewer, Category, CommentItem, Listing } from "@/lib/types";
 
 const VIEWED_KEY = "shmavito.viewed";
 const LIKED_KEY = "shmavito.likes";
-type CatalogViewer = { id: string; login: string; displayName: string; avatarUrl: string | null; likedIds: string[]; viewedIds: string[] };
 type ApiComment = { id: string; body: string; parentId: string | null; createdAt: string; author: { id: string; login: string; displayName: string; avatarUrl: string | null } };
+
+type CatalogExperienceProps = {
+  initialPayload?: CatalogPayload;
+  initialCategories?: string[];
+};
+
+function listingsForViewer(payload: CatalogPayload) {
+  const likedIds = payload.viewer?.likedIds || [];
+  return payload.listings.map((item) => ({
+    ...item,
+    likes: Math.max(0, item.likes - Number(likedIds.includes(item.id))),
+  }));
+}
 
 function commentFromApi(comment: ApiComment): CommentItem {
   return {
@@ -45,30 +58,37 @@ function commentFromApi(comment: ApiComment): CommentItem {
   };
 }
 
-export function CatalogExperience() {
+export function CatalogExperience({ initialPayload, initialCategories }: CatalogExperienceProps) {
   const router = useRouter();
+  const hasInitialPayload = Boolean(initialPayload);
+  const hydrateFromLocalStorage = !initialPayload?.viewer;
   const [category, setCategory] = useState<Category>("Все");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("new");
   const [city, setCity] = useState("Все города");
   const [availability, setAvailability] = useState<"all" | "active" | "unavailable">("all");
   const [unseenOnly, setUnseenOnly] = useState(false);
-  const [viewed, setViewed] = useState<string[]>([]);
-  const [liked, setLiked] = useState<string[]>([]);
+  const [bookmarkedOnly, setBookmarkedOnly] = useState(false);
+  const [viewed, setViewed] = useState<string[]>(initialPayload?.viewer?.viewedIds || []);
+  const [liked, setLiked] = useState<string[]>(initialPayload?.viewer?.likedIds || []);
+  const [bookmarked, setBookmarked] = useState<string[]>(initialPayload?.viewer?.bookmarkIds || []);
   const [selected, setSelected] = useState<Listing | null>(null);
   const [comments, setComments] = useState<Record<string, CommentItem[]>>(initialComments);
-  const [catalogListings, setCatalogListings] = useState<Listing[]>(demoListings);
-  const [catalogCategories, setCatalogCategories] = useState<readonly string[]>(demoCategories);
-  const [catalogMode, setCatalogMode] = useState<"loading" | "live" | "demo">("loading");
-  const [viewer, setViewer] = useState<CatalogViewer | null>(null);
+  const [catalogListings, setCatalogListings] = useState<Listing[]>(initialPayload ? listingsForViewer(initialPayload) : demoListings);
+  const [catalogCategories, setCatalogCategories] = useState<readonly string[]>(initialCategories ? ["Все", ...initialCategories] : demoCategories);
+  const [catalogMode, setCatalogMode] = useState<"loading" | "live" | "demo">(initialPayload ? "live" : "loading");
+  const [viewer, setViewer] = useState<CatalogViewer | null>(initialPayload?.viewer || null);
+  const [catalogStats, setCatalogStats] = useState<CatalogStats | null>(initialPayload?.stats || null);
 
   useEffect(() => {
     const hydrateLocalState = window.setTimeout(() => {
-      setViewed(JSON.parse(localStorage.getItem(VIEWED_KEY) || "[]"));
-      setLiked(JSON.parse(localStorage.getItem(LIKED_KEY) || "[]"));
+      if (hydrateFromLocalStorage) {
+        setViewed(JSON.parse(localStorage.getItem(VIEWED_KEY) || "[]"));
+        setLiked(JSON.parse(localStorage.getItem(LIKED_KEY) || "[]"));
+      }
     }, 0);
     return () => window.clearTimeout(hydrateLocalState);
-  }, []);
+  }, [hydrateFromLocalStorage]);
 
   useEffect(() => {
     Promise.all([
@@ -77,24 +97,51 @@ export function CatalogExperience() {
     ])
       .then(async ([listingResponse, categoryResponse]) => {
         if (!listingResponse.ok || !categoryResponse.ok) throw new Error("catalog unavailable");
-        const listingPayload = await listingResponse.json() as { listings: Listing[]; viewer: CatalogViewer | null };
+        const listingPayload = await listingResponse.json() as CatalogPayload;
         const categoryPayload = await categoryResponse.json() as { categories: { name: string }[] };
+        setCatalogStats(listingPayload.stats);
         setCatalogCategories(["Все", ...categoryPayload.categories.map((item) => item.name)]);
-        if (listingPayload.listings.length) {
-          const likedIds = listingPayload.viewer?.likedIds || [];
-          setCatalogListings(listingPayload.listings.map((item) => ({ ...item, likes: Math.max(0, item.likes - Number(likedIds.includes(item.id))) })));
-          setViewer(listingPayload.viewer);
-          if (listingPayload.viewer) {
-            setLiked(likedIds);
-            setViewed(listingPayload.viewer.viewedIds);
-          }
-          setComments({});
-          setCatalogMode("live");
-        } else {
-          setCatalogMode("demo");
+        setCatalogListings(listingsForViewer(listingPayload));
+        setViewer(listingPayload.viewer);
+        if (listingPayload.viewer) {
+          setLiked(listingPayload.viewer.likedIds);
+          setViewed(listingPayload.viewer.viewedIds);
+          setBookmarked(listingPayload.viewer.bookmarkIds);
         }
+        setComments({});
+        setCatalogMode("live");
       })
-      .catch(() => setCatalogMode("demo"));
+      .catch(() => {
+        if (!hasInitialPayload) setCatalogMode("demo");
+      });
+  }, [hasInitialPayload]);
+
+  useEffect(() => {
+    let active = true;
+    let refreshing = false;
+
+    async function refreshStats() {
+      if (!active || refreshing || document.visibilityState === "hidden") return;
+      refreshing = true;
+      try {
+        const response = await fetch("/api/listings", { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = await response.json() as CatalogPayload;
+        if (active) setCatalogStats(payload.stats);
+      } catch {
+        // Keep the last confirmed counts until the next refresh.
+      } finally {
+        refreshing = false;
+      }
+    }
+
+    const timer = window.setInterval(refreshStats, 60_000);
+    document.addEventListener("visibilitychange", refreshStats);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshStats);
+    };
   }, []);
 
   const filtered = useMemo(() => {
@@ -105,7 +152,8 @@ export function CatalogExperience() {
       const cityMatch = city === "Все города" || item.location === city;
       const availabilityMatch = availability === "all" || (availability === "unavailable" ? item.unavailable : !item.unavailable);
       const unseenMatch = !unseenOnly || !viewed.includes(item.id);
-      return categoryMatch && queryMatch && cityMatch && availabilityMatch && unseenMatch;
+      const bookmarkedMatch = !bookmarkedOnly || bookmarked.includes(item.id);
+      return categoryMatch && queryMatch && cityMatch && availabilityMatch && unseenMatch && bookmarkedMatch;
     });
     return result.toSorted((a, b) => {
       if (sort === "popular") return b.likes + Number(liked.includes(b.id)) - (a.likes + Number(liked.includes(a.id)));
@@ -113,7 +161,7 @@ export function CatalogExperience() {
       if (sort === "old") return catalogListings.indexOf(b) - catalogListings.indexOf(a);
       return catalogListings.indexOf(a) - catalogListings.indexOf(b);
     });
-  }, [availability, catalogListings, category, city, liked, query, sort, unseenOnly, viewed]);
+  }, [availability, bookmarked, bookmarkedOnly, catalogListings, category, city, liked, query, sort, unseenOnly, viewed]);
 
   const cities = useMemo(() => ["Все города", ...[...new Set(catalogListings.map((item) => item.location).filter(Boolean))].toSorted((a, b) => a.localeCompare(b, "ru"))], [catalogListings]);
 
@@ -165,6 +213,35 @@ export function CatalogExperience() {
     }
   }
 
+  async function toggleBookmark(id: string) {
+    if (catalogMode === "live" && !viewer) {
+      router.push("/api/auth/twitch/start?returnTo=/");
+      return;
+    }
+    const previous = bookmarked;
+    const next = bookmarked.includes(id) ? bookmarked.filter((itemId) => itemId !== id) : [...bookmarked, id];
+    setBookmarked(next);
+    if (catalogMode !== "live") return;
+
+    try {
+      const response = await fetch(`/api/listings/${encodeURIComponent(id)}/bookmark`, { method: "POST" });
+      if (response.status === 401) { router.push("/api/auth/twitch/start?returnTo=/"); return; }
+      const payload = await response.json() as { bookmarked?: boolean; message?: string };
+      if (!response.ok) throw new Error(payload.message || "Не удалось сохранить закладку.");
+      setBookmarked((current) => payload.bookmarked ? [...new Set([...current, id])] : current.filter((itemId) => itemId !== id));
+    } catch {
+      setBookmarked(previous);
+    }
+  }
+
+  function trackOutbound(id: string) {
+    if (catalogMode !== "live") return;
+    fetch(`/api/listings/${encodeURIComponent(id)}/outbound`, { method: "POST", keepalive: true })
+      .then(async (response) => response.ok ? response.json() as Promise<{ count: number }> : Promise.reject())
+      .then(() => setCatalogStats((current) => current ? { ...current, outboundClicks: current.outboundClicks + 1 } : current))
+      .catch(() => undefined);
+  }
+
   async function addComment(listingId: string, text: string, parentId?: string) {
     if (catalogMode === "live") {
       if (!viewer) { router.push("/api/auth/twitch/start?returnTo=/"); return false; }
@@ -211,15 +288,14 @@ export function CatalogExperience() {
         <div className="hero-copy shell">
           <div className="eyebrow"><Sparkles size={15} /> ШМАВИТО × STEEL</div>
           <h1>НАХОДКИ<br /><span>СТАИ</span></h1>
-          <p>Стая находит самые интересные объявления. Модераторы проверяют — STEEL выносит вердикт.</p>
           <div className="hero-actions">
             <Link className="button button-primary" href="/submit">Предложить объявление <ArrowRight size={18} /></Link>
             <a className="button button-ghost" href="#catalog">Смотреть каталог</a>
           </div>
           <div className="hero-stats" aria-label="Статистика каталога">
-            <div><strong>1 284</strong><span>находки</span></div>
-            <div><strong>48</strong><span>на модерации</span></div>
-            <div><strong>26 910</strong><span>переходов</span></div>
+            <div><strong>{catalogStats ? catalogStats.findings.toLocaleString("ru-RU") : "—"}</strong><span>находки</span></div>
+            <div><strong>{catalogStats ? catalogStats.pending.toLocaleString("ru-RU") : "—"}</strong><span>на модерации</span></div>
+            <div><strong>{catalogStats ? catalogStats.outboundClicks.toLocaleString("ru-RU") : "—"}</strong><span>переходов</span></div>
           </div>
         </div>
         <a className="steel-card" href="https://www.twitch.tv/steel" target="_blank" rel="noreferrer" aria-label="Открыть Twitch-канал STEEL">
@@ -242,7 +318,10 @@ export function CatalogExperience() {
           <label className="select-box"><SlidersHorizontal size={17} /><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="new">Сначала новые</option><option value="popular">Популярные</option><option value="discussed">Обсуждаемые</option><option value="old">Сначала старые</option></select><ChevronDown size={15} /></label>
           <label className="select-box"><MapPin size={17} /><select value={city} onChange={(event) => setCity(event.target.value)} aria-label="Фильтр по городу">{cities.map((item) => <option value={item} key={item}>{item}</option>)}</select><ChevronDown size={15} /></label>
           <label className="select-box"><Eye size={17} /><select value={availability} onChange={(event) => setAvailability(event.target.value as "all" | "active" | "unavailable")} aria-label="Фильтр по доступности"><option value="all">Все объявления</option><option value="active">Только активные</option><option value="unavailable">Снятые с публикации</option></select><ChevronDown size={15} /></label>
-          <label className="check-chip"><input type="checkbox" checked={unseenOnly} onChange={(event) => setUnseenOnly(event.target.checked)} /><span /> Только непросмотренные</label>
+          <div className="catalog-toggle-filters">
+            <label className="check-chip"><input type="checkbox" checked={unseenOnly} onChange={(event) => setUnseenOnly(event.target.checked)} /><span /> Непросмотренные</label>
+            <label className="check-chip"><input type="checkbox" checked={bookmarkedOnly} onChange={(event) => setBookmarkedOnly(event.target.checked)} /><span /> Закладки</label>
+          </div>
         </div>
 
         <div className="category-row" aria-label="Категории">
@@ -254,11 +333,11 @@ export function CatalogExperience() {
         {filtered.length ? (
           <div className="listing-grid">
             {filtered.map((item) => (
-              <ListingCard key={item.id} item={item} viewed={viewed.includes(item.id)} liked={liked.includes(item.id)} own={catalogMode === "live" ? item.author.id === viewer?.id : item.author.name === "rafchibiskus"} onOpen={() => openListing(item)} onLike={() => toggleLike(item.id)} />
+              <ListingCard key={item.id} item={item} viewed={viewed.includes(item.id)} liked={liked.includes(item.id)} bookmarked={bookmarked.includes(item.id)} own={catalogMode === "live" ? item.author.id === viewer?.id : item.author.name === "rafchibiskus"} onOpen={() => openListing(item)} onLike={() => toggleLike(item.id)} onBookmark={() => toggleBookmark(item.id)} onOutbound={() => trackOutbound(item.id)} />
             ))}
           </div>
         ) : (
-          <div className="empty-state"><Search size={30} /><h3>Ничего не найдено</h3><p>Попробуйте другой запрос или сбросьте фильтры.</p><button className="button button-ghost" onClick={() => { setCategory("Все"); setQuery(""); setCity("Все города"); setAvailability("all"); setUnseenOnly(false); }}>Сбросить фильтры</button></div>
+          <div className="empty-state"><Search size={30} /><h3>Ничего не найдено</h3><p>Попробуйте другой запрос или сбросьте фильтры.</p><button className="button button-ghost" onClick={() => { setCategory("Все"); setQuery(""); setCity("Все города"); setAvailability("all"); setUnseenOnly(false); setBookmarkedOnly(false); }}>Сбросить фильтры</button></div>
         )}
       </main>
 
@@ -266,12 +345,12 @@ export function CatalogExperience() {
         <div className="shell submit-cta-inner"><div><span className="section-kicker">НАШЛИ ЧТО-ТО ИНТЕРЕСНОЕ?</span><h2>Отправьте ссылку — остальное сделаем мы</h2><p>Вставьте объявление Avito, выберите категорию и проверьте данные.</p></div><Link className="button button-light" href="/submit">Предложить объявление <ArrowRight size={18} /></Link></div>
       </section>
 
-      {selected && <ListingDrawer key={selected.id} item={selected} liked={liked.includes(selected.id)} own={catalogMode === "live" ? selected.author.id === viewer?.id : selected.author.name === "rafchibiskus"} viewerAvatar={viewer?.avatarUrl || null} comments={comments[selected.id] || []} onClose={() => setSelected(null)} onLike={() => toggleLike(selected.id)} onComment={(text, parent) => addComment(selected.id, text, parent)} onReport={reportTarget} />}
+      {selected && <ListingDrawer key={selected.id} item={selected} liked={liked.includes(selected.id)} bookmarked={bookmarked.includes(selected.id)} own={catalogMode === "live" ? selected.author.id === viewer?.id : selected.author.name === "rafchibiskus"} viewerAvatar={viewer?.avatarUrl || null} comments={comments[selected.id] || []} onClose={() => setSelected(null)} onLike={() => toggleLike(selected.id)} onBookmark={() => toggleBookmark(selected.id)} onOutbound={() => trackOutbound(selected.id)} onComment={(text, parent) => addComment(selected.id, text, parent)} onReport={reportTarget} />}
     </>
   );
 }
 
-function ListingCard({ item, viewed, liked, own, onOpen, onLike }: { item: Listing; viewed: boolean; liked: boolean; own: boolean; onOpen: () => void; onLike: () => void }) {
+function ListingCard({ item, viewed, liked, bookmarked, own, onOpen, onLike, onBookmark, onOutbound }: { item: Listing; viewed: boolean; liked: boolean; bookmarked: boolean; own: boolean; onOpen: () => void; onLike: () => void; onBookmark: () => void; onOutbound: () => void }) {
   const images = item.images?.length ? item.images : [item.image];
   const [imageIndex, setImageIndex] = useState(0);
 
@@ -302,16 +381,17 @@ function ListingCard({ item, viewed, liked, own, onOpen, onLike }: { item: Listi
       </div>
       <div className="card-footer">
         <button className={liked ? "liked" : ""} disabled={own || item.unavailable} onClick={onLike} title={own ? "Это ваше предложение — свои объявления лайкать нельзя" : "Лайк"}><Heart size={16} fill={liked ? "currentColor" : "none"} /> {own ? "Ваше" : item.likes + Number(liked)}</button>
+        <button className={bookmarked ? "bookmarked" : ""} onClick={onBookmark} title={bookmarked ? "Убрать из закладок" : "Сохранить в закладки"} aria-label={bookmarked ? "Убрать из закладок" : "Сохранить в закладки"}><Bookmark size={16} fill={bookmarked ? "currentColor" : "none"} /></button>
         <button onClick={onOpen}><MessageCircle size={16} /> {item.comments}</button>
         <span><Eye size={16} /> {item.views.toLocaleString("ru-RU")}</span>
         <button className="open-card" onClick={onOpen}>Подробнее <ArrowRight size={15} /></button>
-        {!item.unavailable && <a className="card-avito-link" href={item.sourceUrl} target="_blank" rel="noreferrer">На Avito <ExternalLink size={15} /></a>}
+        {!item.unavailable && <a className="card-avito-link" href={item.sourceUrl} target="_blank" rel="noreferrer" onClick={onOutbound}>На Avito <ExternalLink size={15} /></a>}
       </div>
     </article>
   );
 }
 
-function ListingDrawer({ item, liked, own, viewerAvatar, comments, onClose, onLike, onComment, onReport }: { item: Listing; liked: boolean; own: boolean; viewerAvatar: string | null; comments: CommentItem[]; onClose: () => void; onLike: () => void; onComment: (text: string, parentId?: string) => Promise<boolean>; onReport: (targetType: "listing" | "comment", targetId: string, reason: string) => Promise<string | null> }) {
+function ListingDrawer({ item, liked, bookmarked, own, viewerAvatar, comments, onClose, onLike, onBookmark, onOutbound, onComment, onReport }: { item: Listing; liked: boolean; bookmarked: boolean; own: boolean; viewerAvatar: string | null; comments: CommentItem[]; onClose: () => void; onLike: () => void; onBookmark: () => void; onOutbound: () => void; onComment: (text: string, parentId?: string) => Promise<boolean>; onReport: (targetType: "listing" | "comment", targetId: string, reason: string) => Promise<string | null> }) {
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<CommentItem | null>(null);
   const [sending, setSending] = useState(false);
@@ -392,8 +472,9 @@ function ListingDrawer({ item, liked, own, viewerAvatar, comments, onClose, onLi
           <p className="drawer-description">{item.description}</p>
           <div className="drawer-author"><span className="avatar"><Image src={item.author.avatar} alt="" width={38} height={38} /></span><div><small>Предложил</small><strong>{item.author.name}</strong></div><BadgeCheck size={16} /></div>
           <div className="drawer-actions">
-            <a className={`button button-primary ${item.unavailable ? "disabled" : ""}`} href={item.unavailable ? undefined : item.sourceUrl} target="_blank" rel="noreferrer">Открыть на Avito <ExternalLink size={17} /></a>
+            <a className={`button button-primary ${item.unavailable ? "disabled" : ""}`} href={item.unavailable ? undefined : item.sourceUrl} target="_blank" rel="noreferrer" onClick={item.unavailable ? undefined : onOutbound}>Открыть на Avito <ExternalLink size={17} /></a>
             <button className={`button button-ghost ${liked ? "liked" : ""}`} onClick={onLike} disabled={own || item.unavailable} title={own ? "Свои объявления лайкать нельзя" : "Лайк"}><Heart size={17} fill={liked ? "currentColor" : "none"} /> {own ? "Ваше объявление" : item.likes + Number(liked)}</button>
+            <button className={`button button-ghost ${bookmarked ? "bookmarked" : ""}`} onClick={onBookmark}><Bookmark size={17} fill={bookmarked ? "currentColor" : "none"} /> {bookmarked ? "В закладках" : "В закладки"}</button>
             <button className="icon-button" title="Пожаловаться" onClick={() => setReportTarget({ type: "listing", id: item.id })}><Flag size={18} /></button>
           </div>
           <p className="external-note">ШМАВИТО не является Avito и не участвует в сделке. Проверяйте объявление и продавца на внешнем сайте.</p>

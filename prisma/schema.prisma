@@ -47,6 +47,7 @@ model User {
   status        UserStatus     @default(ACTIVE)
   submissions   Submission[]
   likes         Like[]
+  bookmarks     Bookmark[]
   comments      Comment[]
   views         ItemView[]
   notifications Notification[]
@@ -107,6 +108,7 @@ model Listing {
   state            ListingState        @default(ACTIVE)
   images           ListingImage[]
   likes            Like[]
+  bookmarks        Bookmark[]
   comments         Comment[]
   views            ItemView[]
   availability     AvailabilityCheck[]
@@ -114,6 +116,7 @@ model Listing {
   publishedAt      DateTime            @default(now())
   unavailableAt    DateTime?
   lastCheckedAt    DateTime?
+  outboundClicks   Int                 @default(0)
   deletedAt        DateTime?
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
@@ -142,6 +145,17 @@ model Like {
   createdAt DateTime @default(now())
 
   @@id([userId, listingId])
+}
+
+model Bookmark {
+  userId    String
+  listingId String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, listingId])
+  @@index([userId, createdAt])
 }
 
 model Comment {

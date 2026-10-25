@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:smoke": "node tools/api-smoke.mjs",
+    "images:refresh": "node tools/refresh-avito-images.mjs",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "node prisma/seed.mjs"

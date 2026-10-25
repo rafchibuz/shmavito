@@ -58,6 +58,14 @@ function safeImageUrl(value: unknown) {
   }
 }
 
+function prioritizeImageUrls(values: Array<string | null>) {
+  return [...new Set(values.filter((value): value is string => value !== null && isTrustedAvitoImageUrl(value)))]
+    .map((url, position) => ({ url, position, priority: new URL(url).pathname.startsWith("/img/share/") ? 2 : 1 }))
+    .toSorted((left, right) => right.priority - left.priority || left.position - right.position)
+    .map(({ url }) => url)
+    .slice(0, MAX_IMAGES);
+}
+
 function parsePrice(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return Math.round(value);
   if (typeof value !== "string") return null;
@@ -195,9 +203,7 @@ function mergeAutomaticResults(primary: AvitoImportResult, fallback: AvitoImport
     description: primary.description || fallback.description,
     price: primary.price ?? fallback.price,
     city: primary.city || fallback.city,
-    imageUrls: [...new Set([...primary.imageUrls, ...fallback.imageUrls])]
-      .filter(isTrustedAvitoImageUrl)
-      .slice(0, MAX_IMAGES),
+    imageUrls: prioritizeImageUrls([...primary.imageUrls, ...fallback.imageUrls]),
   };
   const importedFields = importedFieldNames(merged);
 
@@ -237,8 +243,7 @@ function parseReaderMarkdown(markdown: string, normalizedUrl: string, metadataIm
   const priceMatch = markdown.match(/^\s*([\d\s]{2,})\s*₽\s*$/m);
   const price = priceMatch ? parsePrice(priceMatch[1]) : null;
 
-  const imageUrls = [...new Set([...structuredImages, ...metadataImages].map(safeImageUrl)
-    .filter((value): value is string => value !== null && isTrustedAvitoImageUrl(value)))].slice(0, MAX_IMAGES);
+  const imageUrls = prioritizeImageUrls([...metadataImages, ...structuredImages].map(safeImageUrl));
   let city = "";
   const imagePattern = /!\[([^\]]*)\]\((https:\/\/[^)\s]+)\)/gi;
   for (const match of markdown.matchAll(imagePattern)) {
@@ -351,10 +356,10 @@ export async function importAvitoListing(sourceUrl: string): Promise<AvitoImport
   for (const key of ["og:image", "og:image:url", "twitter:image"]) {
     if (metadata.get(key)) imageCandidates.push(metadata.get(key));
   }
-  const imageUrls = [...new Set(imageCandidates.flatMap((value) => {
+  const imageUrls = prioritizeImageUrls(imageCandidates.flatMap((value) => {
     if (isRecord(value)) return [safeImageUrl(value.url ?? value.contentUrl)];
     return [safeImageUrl(value)];
-  }).filter((value): value is string => value !== null && isTrustedAvitoImageUrl(value)))].slice(0, MAX_IMAGES);
+  }));
 
   if (!title) return importThroughReader(currentUrl, "Avito открыл страницу, но не отдал название объявления. Заполните данные вручную.");
 

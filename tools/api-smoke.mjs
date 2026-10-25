@@ -77,6 +77,7 @@ async function main() {
   const publicCatalog = await request("/api/listings");
   invariant(publicCatalog.viewer === null, "Public catalog unexpectedly has an authenticated viewer");
   invariant(publicCatalog.listings.length > 0, "Smoke test requires at least one published listing");
+  invariant(Number.isInteger(publicCatalog.stats?.findings) && Number.isInteger(publicCatalog.stats?.pending) && Number.isInteger(publicCatalog.stats?.outboundClicks), "Public catalog stats are invalid");
   const listing = publicCatalog.listings[0];
 
   const [viewer, moderator] = await Promise.all([
@@ -162,6 +163,19 @@ async function main() {
   const authenticatedCatalog = await request("/api/listings", { token: viewerToken });
   invariant(authenticatedCatalog.viewer?.id === viewer.id, "Authenticated viewer was not returned");
 
+  const savedBookmark = await request(`/api/listings/${approved.listing.id}/bookmark`, { token: viewerToken, method: "POST" });
+  invariant(savedBookmark.bookmarked === true, "Bookmark was not saved");
+  const catalogWithBookmark = await request("/api/listings", { token: viewerToken });
+  invariant(catalogWithBookmark.viewer?.bookmarkIds.includes(approved.listing.id), "Saved bookmark is absent from the catalog viewer state");
+  const removedBookmark = await request(`/api/listings/${approved.listing.id}/bookmark`, { token: viewerToken, method: "POST" });
+  invariant(removedBookmark.bookmarked === false, "Bookmark was not removed");
+
+  const outboundBefore = catalogWithBookmark.stats.outboundClicks;
+  const outbound = await request(`/api/listings/${approved.listing.id}/outbound`, { token: viewerToken, method: "POST" });
+  invariant(outbound.count === 1, "Outbound Avito click was not counted");
+  const catalogAfterOutbound = await request("/api/listings");
+  invariant(catalogAfterOutbound.stats.outboundClicks === outboundBefore + 1, "Live outbound counter was not updated");
+
   if (process.env.SMOKE_AVITO_IMPORT === "1") {
     const avitoSmokeUrl = process.env.SMOKE_AVITO_URL || listing.sourceUrl;
     const imported = await request("/api/import/avito", {
@@ -174,6 +188,7 @@ async function main() {
     invariant(imported.price > 0 && imported.city, `Avito import missed price or city: ${JSON.stringify(imported)}`);
     const minimumImages = Math.max(1, Number(process.env.SMOKE_EXPECT_MIN_IMAGES) || 1);
     invariant(imported.imageUrls?.length >= minimumImages, `Avito import returned fewer than ${minimumImages} listing images`);
+    invariant(imported.imageUrls[0]?.includes("/img/share/"), "Avito import did not prioritize the larger share image");
     console.log(`Avito import passed: ${imported.title}; ${imported.price} ₽; ${imported.city}; ${imported.imageUrls.length} image(s).`);
   }
 
@@ -263,7 +278,7 @@ async function main() {
   });
   invariant(auditCount === 2, "Report decisions were not fully audited");
 
-  console.log("Smoke test passed: catalog, auth session, views, likes, comments, replies, notifications, reports, moderation.");
+  console.log("Smoke test passed: catalog, live stats, auth session, views, bookmarks, outbound clicks, likes, comments, replies, notifications, reports, moderation.");
 }
 
 try {
