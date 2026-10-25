@@ -44,7 +44,11 @@ export function AdminListingsPanel({ notify, onChanged }: { notify: (message: st
     } finally { setLoading(false); }
   }, [status, query]);
 
-  useEffect(() => { void load(page); }, [load, page]);
+  useEffect(() => {
+    let active = true;
+    void Promise.resolve().then(() => { if (active) return load(page); });
+    return () => { active = false; };
+  }, [load, page]);
 
   function searchListings(event: FormEvent) {
     event.preventDefault();

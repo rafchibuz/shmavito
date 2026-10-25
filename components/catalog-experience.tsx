@@ -71,6 +71,7 @@ export function CatalogExperience({ initialPayload, initialCategories, initialSo
   const [availability, setAvailability] = useState<"all" | "active" | "unavailable">("all");
   const [unseenOnly, setUnseenOnly] = useState(false);
   const [bookmarkedOnly, setBookmarkedOnly] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [viewed, setViewed] = useState<string[]>(initialPayload?.viewer?.viewedIds || []);
   const [liked, setLiked] = useState<string[]>(initialPayload?.viewer?.likedIds || []);
   const [bookmarked, setBookmarked] = useState<string[]>(initialPayload?.viewer?.bookmarkIds || []);
@@ -166,6 +167,7 @@ export function CatalogExperience({ initialPayload, initialCategories, initialSo
   }, [availability, bookmarked, bookmarkedOnly, catalogListings, category, city, liked, query, sort, unseenOnly, viewed]);
 
   const cities = useMemo(() => ["Все города", ...[...new Set(catalogListings.map((item) => item.location).filter(Boolean))].toSorted((a, b) => a.localeCompare(b, "ru"))], [catalogListings]);
+  const activeFilterCount = Number(sort !== "new") + Number(city !== "Все города") + Number(availability !== "all") + Number(unseenOnly) + Number(bookmarkedOnly);
 
   function persistViewed(next: string[]) {
     setViewed(next);
@@ -322,12 +324,19 @@ export function CatalogExperience({ initialPayload, initialCategories, initialSo
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Марка, модель, город или описание" />
             {query && <button onClick={() => setQuery("")} aria-label="Очистить поиск"><X size={16} /></button>}
           </label>
-          <label className="select-box"><SlidersHorizontal size={17} /><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="new">Сначала новые</option><option value="popular">Популярные</option><option value="discussed">Обсуждаемые</option><option value="old">Сначала старые</option></select><ChevronDown size={15} /></label>
-          <label className="select-box"><MapPin size={17} /><select value={city} onChange={(event) => setCity(event.target.value)} aria-label="Фильтр по городу">{cities.map((item) => <option value={item} key={item}>{item}</option>)}</select><ChevronDown size={15} /></label>
-          <label className="select-box"><Eye size={17} /><select value={availability} onChange={(event) => setAvailability(event.target.value as "all" | "active" | "unavailable")} aria-label="Фильтр по доступности"><option value="all">Все объявления</option><option value="active">Только активные</option><option value="unavailable">Снятые с публикации</option></select><ChevronDown size={15} /></label>
-          <div className="catalog-toggle-filters">
-            <label className="check-chip"><input type="checkbox" checked={unseenOnly} onChange={(event) => setUnseenOnly(event.target.checked)} /><span /> Непросмотренные</label>
-            <label className="check-chip"><input type="checkbox" checked={bookmarkedOnly} onChange={(event) => setBookmarkedOnly(event.target.checked)} /><span /> Закладки</label>
+          <button className={`mobile-filter-button ${mobileFiltersOpen ? "active" : ""}`} type="button" aria-expanded={mobileFiltersOpen} aria-controls="catalog-advanced-filters" onClick={() => setMobileFiltersOpen((open) => !open)}>
+            <SlidersHorizontal size={18} /> Фильтры
+            {activeFilterCount > 0 && <b aria-label={`Активных фильтров: ${activeFilterCount}`}>{activeFilterCount}</b>}
+            <ChevronDown size={17} />
+          </button>
+          <div id="catalog-advanced-filters" className={`catalog-advanced-filters ${mobileFiltersOpen ? "is-open" : ""}`}>
+            <label className="select-box"><SlidersHorizontal size={17} /><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="new">Сначала новые</option><option value="popular">Популярные</option><option value="discussed">Обсуждаемые</option><option value="old">Сначала старые</option></select><ChevronDown size={15} /></label>
+            <label className="select-box"><MapPin size={17} /><select value={city} onChange={(event) => setCity(event.target.value)} aria-label="Фильтр по городу">{cities.map((item) => <option value={item} key={item}>{item}</option>)}</select><ChevronDown size={15} /></label>
+            <label className="select-box"><Eye size={17} /><select value={availability} onChange={(event) => setAvailability(event.target.value as "all" | "active" | "unavailable")} aria-label="Фильтр по доступности"><option value="all">Все объявления</option><option value="active">Только активные</option><option value="unavailable">Снятые с публикации</option></select><ChevronDown size={15} /></label>
+            <div className="catalog-toggle-filters">
+              <label className="check-chip"><input type="checkbox" checked={unseenOnly} onChange={(event) => setUnseenOnly(event.target.checked)} /><span /> Непросмотренные</label>
+              <label className="check-chip"><input type="checkbox" checked={bookmarkedOnly} onChange={(event) => setBookmarkedOnly(event.target.checked)} /><span /> Закладки</label>
+            </div>
           </div>
         </div>
 
