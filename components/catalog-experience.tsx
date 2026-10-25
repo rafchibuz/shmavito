@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { categories as demoCategories, initialComments, listings as demoListings } from "@/lib/demo-data";
+import { socialIconSource, type SocialLink } from "@/lib/social-links-config";
 import type { CatalogPayload, CatalogStats, CatalogViewer, Category, CommentItem, Listing } from "@/lib/types";
 
 const VIEWED_KEY = "shmavito.viewed";
@@ -36,6 +37,7 @@ type ApiComment = { id: string; body: string; parentId: string | null; createdAt
 type CatalogExperienceProps = {
   initialPayload?: CatalogPayload;
   initialCategories?: string[];
+  initialSocialLinks: SocialLink[];
 };
 
 function listingsForViewer(payload: CatalogPayload) {
@@ -58,7 +60,7 @@ function commentFromApi(comment: ApiComment): CommentItem {
   };
 }
 
-export function CatalogExperience({ initialPayload, initialCategories }: CatalogExperienceProps) {
+export function CatalogExperience({ initialPayload, initialCategories, initialSocialLinks }: CatalogExperienceProps) {
   const router = useRouter();
   const hasInitialPayload = Boolean(initialPayload);
   const hydrateFromLocalStorage = !initialPayload?.viewer;
@@ -297,6 +299,11 @@ export function CatalogExperience({ initialPayload, initialCategories }: Catalog
             <div><strong>{catalogStats ? catalogStats.pending.toLocaleString("ru-RU") : "—"}</strong><span>на модерации</span></div>
             <div><strong>{catalogStats ? catalogStats.outboundClicks.toLocaleString("ru-RU") : "—"}</strong><span>переходов</span></div>
           </div>
+          {initialSocialLinks.length > 0 && <nav className="hero-socials" aria-label="Соцсети STEEL">
+            {initialSocialLinks.map((link) => <a key={link.id} href={link.url} target="_blank" rel="noopener noreferrer" aria-label={link.label} title={link.label}>
+              <Image src={socialIconSource(link)} alt="" width={42} height={42} unoptimized={link.icon === "custom"} />
+            </a>)}
+          </nav>}
         </div>
         <a className="steel-card" href="https://www.twitch.tv/steel" target="_blank" rel="noreferrer" aria-label="Открыть Twitch-канал STEEL">
           <Image src="/images/steel-portrait.png" alt="STEEL" fill sizes="340px" loading="eager" />
@@ -404,6 +411,23 @@ function ListingDrawer({ item, liked, bookmarked, own, viewerAvatar, comments, o
   const [imageIndex, setImageIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
+
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const previousHtmlOverflow = html.style.overflow;
+    const previousBodyOverflow = body.style.overflow;
+    const previousBodyPadding = body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - html.clientWidth;
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) body.style.paddingRight = `${scrollbarWidth}px`;
+    return () => {
+      html.style.overflow = previousHtmlOverflow;
+      body.style.overflow = previousBodyOverflow;
+      body.style.paddingRight = previousBodyPadding;
+    };
+  }, []);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {

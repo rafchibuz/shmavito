@@ -26,6 +26,18 @@ async function main() {
     update: {},
     create: { key: "submissions.activeLimit", value: 3 },
   });
+  await prisma.setting.upsert({
+    where: { key: "site.socialLinks" },
+    update: {},
+    create: {
+      key: "site.socialLinks",
+      value: [
+        { id: "telegram", label: "Telegram STEEL", url: "https://t.me/steelstaya", icon: "telegram" },
+        { id: "twitch", label: "Twitch STEEL", url: "https://www.twitch.tv/steel", icon: "twitch" },
+        { id: "youtube", label: "YouTube STEEL", url: "https://www.youtube.com/channel/UC-o_cRtKA9IIkYBpceKU8ZA", icon: "youtube" },
+      ],
+    },
+  });
   console.log("Seeded Shmavito categories and defaults.");
 }
 
