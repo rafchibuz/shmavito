@@ -4,6 +4,9 @@ import { normalizeAvitoUrl } from "@/lib/submissions";
 
 const CHECK_TIMEOUT_MS = 10_000;
 const MAX_BODY_BYTES = 1024 * 1024;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const RETRY_DELAYS_MS = [60, 4 * 60, 12 * 60, 24 * 60].map((minutes) => minutes * 60 * 1000);
+const CHECK_LEASE_MS = 2 * 60 * 1000;
 const UNAVAILABLE_PATTERN = /страниц(?:а|ы) не найдена|такой страницы нет|объявление (?:снято|закрыто|удалено)|товар снят с публикации/i;
 const BLOCKED_PATTERN = /captcha|доступ ограничен|подозрительн(?:ая|ую) активност/i;
 
@@ -98,25 +101,44 @@ async function checkAvitoAvailability(sourceUrl: string): Promise<CheckResult> {
 }
 
 export async function runAvailabilityChecks({ limit = 20, force = false, actorId = null }: { limit?: number; force?: boolean; actorId?: string | null } = {}) {
-  const dueBefore = new Date(Date.now() - 23 * 60 * 60 * 1000);
+  const now = new Date();
+  const dueFilter = { OR: [{ nextCheckAt: null }, { nextCheckAt: { lte: now } }] };
   const listings = await db.listing.findMany({
     where: {
       state: ListingState.ACTIVE,
       deletedAt: null,
-      ...(force ? {} : { OR: [{ lastCheckedAt: null }, { lastCheckedAt: { lte: dueBefore } }] }),
+      ...(force ? {} : dueFilter),
     },
-    orderBy: [{ lastCheckedAt: "asc" }, { publishedAt: "asc" }],
+    orderBy: force ? [{ lastCheckedAt: "asc" }, { publishedAt: "asc" }] : [{ nextCheckAt: "asc" }, { publishedAt: "asc" }],
     take: Math.min(Math.max(limit, 1), 50),
-    select: { id: true, submission: { select: { sourceUrl: true } } },
+    select: {
+      id: true,
+      submission: { select: { sourceUrl: true } },
+      availability: { orderBy: { checkedAt: "desc" }, take: 3, select: { result: true } },
+    },
   });
 
   const results: CheckResult[] = [];
   for (let index = 0; index < listings.length; index += 5) {
     const batch = listings.slice(index, index + 5);
     const checked = await Promise.all(batch.map(async (listing) => {
+      if (!force) {
+        const claim = await db.listing.updateMany({
+          where: { id: listing.id, state: ListingState.ACTIVE, deletedAt: null, ...dueFilter },
+          data: { nextCheckAt: new Date(Date.now() + CHECK_LEASE_MS) },
+        });
+        if (!claim.count) return null;
+      }
       const startedAt = Date.now();
-      const check = await checkAvitoAvailability(listing.submission.sourceUrl);
+      const check = await checkAvitoAvailability(listing.submission.sourceUrl).catch((): CheckResult => ({ result: "ERROR", httpStatus: null, errorCode: "CHECK_FAILED" }));
       const checkedAt = new Date();
+      const previousErrors = listing.availability.findIndex((item) => item.result !== "ERROR");
+      const consecutiveErrors = previousErrors < 0 ? listing.availability.length : previousErrors;
+      const nextCheckAt = check.result === "UNAVAILABLE"
+        ? null
+        : new Date(checkedAt.getTime() + (check.result === "ERROR"
+          ? RETRY_DELAYS_MS[Math.min(consecutiveErrors, RETRY_DELAYS_MS.length - 1)]
+          : DAY_MS));
       await db.$transaction(async (tx) => {
         await tx.availabilityCheck.create({
           data: {
@@ -132,6 +154,7 @@ export async function runAvailabilityChecks({ limit = 20, force = false, actorId
           where: { id: listing.id, state: ListingState.ACTIVE, deletedAt: null },
           data: {
             lastCheckedAt: checkedAt,
+            nextCheckAt,
             ...(check.result === "UNAVAILABLE" ? { state: ListingState.UNAVAILABLE, unavailableAt: checkedAt } : {}),
           },
         });
@@ -149,7 +172,7 @@ export async function runAvailabilityChecks({ limit = 20, force = false, actorId
       });
       return check;
     }));
-    results.push(...checked);
+    results.push(...checked.filter((item): item is CheckResult => item !== null));
   }
 
   await db.rateLimitBucket.deleteMany({ where: { resetAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } } });

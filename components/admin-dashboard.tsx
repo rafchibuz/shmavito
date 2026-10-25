@@ -35,7 +35,7 @@ type AuditItem = { id: string; action: string; targetType: string; targetId: str
 type ApiComment = { id: string; body: string; createdAt: string; author: { login: string; displayName: string; avatarUrl: string | null }; listing: { id: string; title: string; submission: { sourceUrl: string } } };
 type ReportListing = { id: string; title: string; submission: { sourceUrl: string } };
 type ApiReport = { id: string; reason: string; status: "OPEN" | "RESOLVED" | "DISMISSED"; createdAt: string; reporter: { login: string; displayName: string; avatarUrl: string | null }; listing: ReportListing | null; comment: { id: string; body: string; listing: ReportListing } | null };
-type OverviewStats = { pendingCount: number; publishedCount: number; openReportCount: number; availabilityErrors24h: number; lastAvailabilityCheckAt: string | null };
+type OverviewStats = { pendingCount: number; publishedCount: number; openReportCount: number; availabilityErrors24h: number; availabilityErrorReasons24h: { code: string; count: number }[]; lastAvailabilityCheckAt: string | null };
 
 const sectionMeta: Record<Section, { kicker: string; title: string }> = {
   overview: { kicker: "ПАНЕЛЬ УПРАВЛЕНИЯ", title: "Добрый вечер, Раф" },
@@ -165,7 +165,7 @@ export function AdminDashboard() {
           {section === "reports" && <ReportsPanel notify={notify} onCountChange={setReportCount} />}
           {section === "users" && <UsersPanel notify={notify} />}
           {section === "audit" && <AuditPanel />}
-          {section === "settings" && <SettingsPanel notify={notify} />}
+          {section === "settings" && <SettingsPanel notify={notify} stats={overviewStats} onChecked={() => { void loadOverview(); }} />}
         </main>
       </div>
       {toast && <div className="admin-toast"><Check /> {toast}</div>}
@@ -258,7 +258,7 @@ function AuditPanel() {
   return <section className="admin-card admin-workspace"><div className="admin-card-head"><div><span className="section-kicker">ПОСЛЕДНИЕ 100 СОБЫТИЙ</span><h2>Журнал действий</h2></div></div>{logs.length ? <ul className="audit-list full-audit">{logs.map((log) => <li key={log.id}><span className="audit-icon blue"><Shield /></span><p><b>{log.actor?.displayName || log.actor?.login || "system"}</b> · {log.action}<small>{log.targetType} #{log.targetId.slice(-6).toUpperCase()} · {new Date(log.createdAt).toLocaleString("ru-RU")}</small></p></li>)}</ul> : <AdminEmpty icon={<Shield />} title="Журнал пока пуст" text="Действия появятся после модерации или изменения настроек." />}</section>;
 }
 
-function SettingsPanel({ notify }: { notify: (message: string) => void }) {
+function SettingsPanel({ notify, stats, onChecked }: { notify: (message: string) => void; stats: OverviewStats | null; onChecked: () => void }) {
   const [limit, setLimit] = useState(3);
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<{ checked: number; available: number; unavailable: number; errors: number } | null>(null);
@@ -269,10 +269,23 @@ function SettingsPanel({ notify }: { notify: (message: string) => void }) {
     try {
       const result = await api<{ checked: number; available: number; unavailable: number; errors: number }>("/api/admin/availability", { method: "POST" });
       setCheckResult(result);
+      onChecked();
       notify(`Проверено объявлений: ${result.checked}`);
     } catch (error) { notify(error instanceof Error ? error.message : "Ошибка проверки"); } finally { setChecking(false); }
   }
-  return <div className="settings-grid"><section className="admin-card settings-form"><span className="section-kicker">ПРЕДЛОЖЕНИЯ</span><h2>Лимит активных заявок</h2><p>Сколько заявок со статусом «На проверке» может одновременно иметь один пользователь.</p><label className="field"><span>Количество</span><input type="number" min={1} max={100} value={limit} onChange={(event) => setLimit(Number(event.target.value))} /></label><button className="button button-primary" onClick={save}><Save /> Сохранить</button></section><section className="admin-card settings-form"><span className="section-kicker">НАДЁЖНОСТЬ</span><h2>Доступность объявлений</h2><p>Ежедневная задача проверяет активные ссылки. Недоступные объявления остаются в каталоге серыми с пометкой «Снято с публикации».</p>{checkResult && <div className="availability-result"><span>Проверено <b>{checkResult.checked}</b></span><span>Доступно <b>{checkResult.available}</b></span><span>Снято <b>{checkResult.unavailable}</b></span><span>Ошибки <b>{checkResult.errors}</b></span></div>}<button className="button button-primary" disabled={checking} onClick={checkAvailability}><RefreshCw className={checking ? "spin" : ""} /> {checking ? "Проверяем…" : "Проверить сейчас"}</button></section><SocialLinksSettings notify={notify} /></div>;
+  return <div className="settings-grid"><section className="admin-card settings-form"><span className="section-kicker">ПРЕДЛОЖЕНИЯ</span><h2>Лимит активных заявок</h2><p>Сколько заявок со статусом «На проверке» может одновременно иметь один пользователь.</p><label className="field"><span>Количество</span><input type="number" min={1} max={100} value={limit} onChange={(event) => setLimit(Number(event.target.value))} /></label><button className="button button-primary" onClick={save}><Save /> Сохранить</button></section><section className="admin-card settings-form"><span className="section-kicker">НАДЁЖНОСТЬ</span><h2>Доступность объявлений</h2><p>Активные ссылки проверяются раз в сутки. После временной ошибки повтор выполняется раньше. Недоступные объявления остаются в каталоге серыми.</p>{checkResult && <div className="availability-result"><span>Проверено <b>{checkResult.checked}</b></span><span>Доступно <b>{checkResult.available}</b></span><span>Снято <b>{checkResult.unavailable}</b></span><span>Ошибки <b>{checkResult.errors}</b></span></div>}{Boolean(stats?.availabilityErrorReasons24h.length) && <div className="availability-reasons"><strong>Причины ошибок за 24 часа</strong>{stats?.availabilityErrorReasons24h.map((item) => <span key={item.code}>{availabilityReasonLabel(item.code)} <b>{item.count}</b></span>)}</div>}<button className="button button-primary" disabled={checking} onClick={checkAvailability}><RefreshCw className={checking ? "spin" : ""} /> {checking ? "Проверяем…" : "Проверить сейчас"}</button></section><SocialLinksSettings notify={notify} /></div>;
+}
+
+function availabilityReasonLabel(code: string) {
+  const labels: Record<string, string> = {
+    READER_HTTP_ERROR: "Ошибка ответа Avito",
+    READER_EMPTY: "Пустой ответ",
+    READER_TIMEOUT: "Превышено время ожидания",
+    READER_NETWORK_ERROR: "Ошибка сети",
+    INVALID_REDIRECT: "Некорректная переадресация",
+    CHECK_FAILED: "Ошибка проверки",
+  };
+  return labels[code] || code;
 }
 
 function CommentsPanel({ notify }: { notify: (message: string) => void }) {

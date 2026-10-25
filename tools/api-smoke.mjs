@@ -158,7 +158,7 @@ async function main() {
   invariant(catalogAfterApproval.listings.some((item) => item.id === approved.listing.id && item.title.includes("edited") && item.originalTitle.includes("edited") && item.submitterComment.includes("Moderator") && item.images?.length === smokeImages.length), "Approved listing copy or its full gallery did not reach the public catalog");
   const overview = await request("/api/admin/overview", { token: moderatorToken });
   invariant(overview.publishedCount >= 1, "Admin overview did not count published listings");
-  invariant(Number.isInteger(overview.pendingCount) && Number.isInteger(overview.availabilityErrors24h), "Admin overview returned invalid metrics");
+  invariant(Number.isInteger(overview.pendingCount) && Number.isInteger(overview.availabilityErrors24h) && Array.isArray(overview.availabilityErrorReasons24h), "Admin overview returned invalid metrics");
 
   const authenticatedCatalog = await request("/api/listings", { token: viewerToken });
   invariant(authenticatedCatalog.viewer?.id === viewer.id, "Authenticated viewer was not returned");
