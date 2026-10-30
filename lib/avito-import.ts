@@ -316,9 +316,11 @@ async function importThroughReader(normalizedUrl: string, fallbackWarning: strin
   return manualResult(normalizedUrl, fallbackWarning);
 }
 
-async function importThroughProvider(normalizedUrl: string): Promise<AvitoImportResult | null> {
+type ProviderResponse = { listing: AvitoImportResult | null; paymentRequired: boolean };
+
+async function importThroughProvider(normalizedUrl: string): Promise<ProviderResponse> {
   const apiKey = process.env.APIAD_API_KEY?.trim();
-  if (!apiKey) return null;
+  if (!apiKey) return { listing: null, paymentRequired: false };
 
   // ApiAd accepts only a URL and API key. The destination is fixed, so user input
   // cannot turn this request into a server-side request to an arbitrary host.
@@ -332,34 +334,46 @@ async function importThroughProvider(normalizedUrl: string): Promise<AvitoImport
       signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
       headers: { Accept: "application/json" },
     });
-    if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return null;
+    if (response.status === 402) {
+      console.warn("Avito metadata provider returned HTTP 402: account balance is insufficient.");
+      return { listing: null, paymentRequired: true };
+    }
+    if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) {
+      console.warn("Avito metadata provider returned HTTP", response.status);
+      return { listing: null, paymentRequired: false };
+    }
     const payload: unknown = JSON.parse(await readLimitedText(response));
-    if (!isRecord(payload) || payload.success !== true || !isRecord(payload.data)) return null;
+    if (!isRecord(payload) || payload.success !== true || !isRecord(payload.data)) return { listing: null, paymentRequired: false };
     const data = payload.data;
     const expectedId = extractExternalItemId(normalizedUrl);
     const receivedId = String(payload.avitoId ?? payload.srcId ?? data.id ?? data.avitoid ?? "");
-    if (expectedId && receivedId && expectedId !== receivedId) return null;
+    if (expectedId && receivedId && expectedId !== receivedId) return { listing: null, paymentRequired: false };
 
     const title = cleanText(data.title, 160);
-    if (!title) return null;
+    if (!title) return { listing: null, paymentRequired: false };
     const description = cleanText(data.description, MAX_DESCRIPTION_LENGTH);
     const price = parsePrice(data.price);
     const city = cleanText(data.city, 100);
     const imageUrls = prioritizeImageUrls((Array.isArray(data.images) ? data.images : [])
       .map((item) => safeImageUrl(isRecord(item) ? item.imgurl ?? item.url : item)));
     const importedFields = importedFieldNames({ title, description, price, city, imageUrls });
-    return {
+    return { paymentRequired: false, listing: {
       mode: "automatic", normalizedUrl, title, description, price, city, imageUrls, importedFields,
       warning: importedFields.length < 5 ? "Часть данных объявления не найдена. Проверьте заполненные поля перед отправкой." : null,
-    };
+    } };
   } catch {
     // Keep the manual path available when the optional provider is unavailable.
-    return null;
+    return { listing: null, paymentRequired: false };
   }
 }
 
 async function importThroughFallbacks(normalizedUrl: string, warning: string) {
-  return await importThroughProvider(normalizedUrl) ?? importThroughReader(normalizedUrl, warning);
+  const provider = await importThroughProvider(normalizedUrl);
+  if (provider.listing) return provider.listing;
+  if (provider.paymentRequired) {
+    return manualResult(normalizedUrl, "Резервный источник данных недоступен: требуется пополнить его баланс. Сообщите администратору или заполните данные вручную.");
+  }
+  return importThroughReader(normalizedUrl, warning);
 }
 
 export async function importAvitoListing(sourceUrl: string): Promise<AvitoImportResult> {
@@ -427,7 +441,11 @@ export async function importAvitoListing(sourceUrl: string): Promise<AvitoImport
   if (!needsEnrichment) return directResult;
 
   const providerResult = await importThroughProvider(currentUrl);
-  if (providerResult) return mergeAutomaticResults(directResult, providerResult);
+  if (providerResult.listing) return mergeAutomaticResults(directResult, providerResult.listing);
+  if (providerResult.paymentRequired) {
+    directResult.warning = "Часть данных Avito не получена: резервному источнику требуется пополнение баланса.";
+    return directResult;
+  }
   const readerResult = await importThroughReader(
     currentUrl,
     "Часть данных Avito не удалось получить автоматически. Проверьте заполненные поля перед отправкой.",
