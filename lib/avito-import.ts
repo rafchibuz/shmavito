@@ -1,9 +1,10 @@
 import { ApiError } from "@/lib/http";
-import { isTrustedAvitoImageUrl, normalizeAvitoUrl } from "@/lib/submissions";
+import { extractExternalItemId, isTrustedAvitoImageUrl, normalizeAvitoUrl } from "@/lib/submissions";
 
 const MAX_HTML_BYTES = 3 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 10_000;
 const READER_TIMEOUT_MS = 25_000;
+const PROVIDER_TIMEOUT_MS = 35_000;
 const MAX_REDIRECTS = 3;
 const MAX_IMAGES = 40;
 const MAX_DESCRIPTION_LENGTH = 12_000;
@@ -167,7 +168,7 @@ async function fetchAvitoHtml(initialUrl: string) {
       headers: {
         Accept: "text/html,application/xhtml+xml",
         "Accept-Language": "ru-RU,ru;q=0.9",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36 ShmavitoPreview/1.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       },
     });
     if (response.status >= 300 && response.status < 400) {
@@ -315,6 +316,52 @@ async function importThroughReader(normalizedUrl: string, fallbackWarning: strin
   return manualResult(normalizedUrl, fallbackWarning);
 }
 
+async function importThroughProvider(normalizedUrl: string): Promise<AvitoImportResult | null> {
+  const apiKey = process.env.APIAD_API_KEY?.trim();
+  if (!apiKey) return null;
+
+  // ApiAd accepts only a URL and API key. The destination is fixed, so user input
+  // cannot turn this request into a server-side request to an arbitrary host.
+  const endpoint = new URL("https://apiad.ru/api/avito/parse_sync");
+  endpoint.searchParams.set("apikey", apiKey);
+  endpoint.searchParams.set("url", normalizedUrl);
+  try {
+    const response = await fetch(endpoint, {
+      cache: "no-store",
+      redirect: "error",
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return null;
+    const payload: unknown = JSON.parse(await readLimitedText(response));
+    if (!isRecord(payload) || payload.success !== true || !isRecord(payload.data)) return null;
+    const data = payload.data;
+    const expectedId = extractExternalItemId(normalizedUrl);
+    const receivedId = String(payload.avitoId ?? payload.srcId ?? data.id ?? data.avitoid ?? "");
+    if (expectedId && receivedId && expectedId !== receivedId) return null;
+
+    const title = cleanText(data.title, 160);
+    if (!title) return null;
+    const description = cleanText(data.description, MAX_DESCRIPTION_LENGTH);
+    const price = parsePrice(data.price);
+    const city = cleanText(data.city, 100);
+    const imageUrls = prioritizeImageUrls((Array.isArray(data.images) ? data.images : [])
+      .map((item) => safeImageUrl(isRecord(item) ? item.imgurl ?? item.url : item)));
+    const importedFields = importedFieldNames({ title, description, price, city, imageUrls });
+    return {
+      mode: "automatic", normalizedUrl, title, description, price, city, imageUrls, importedFields,
+      warning: importedFields.length < 5 ? "Часть данных объявления не найдена. Проверьте заполненные поля перед отправкой." : null,
+    };
+  } catch {
+    // Keep the manual path available when the optional provider is unavailable.
+    return null;
+  }
+}
+
+async function importThroughFallbacks(normalizedUrl: string, warning: string) {
+  return await importThroughProvider(normalizedUrl) ?? importThroughReader(normalizedUrl, warning);
+}
+
 export async function importAvitoListing(sourceUrl: string): Promise<AvitoImportResult> {
   const normalizedUrl = normalizeAvitoUrl(sourceUrl);
   let fetched: Awaited<ReturnType<typeof fetchAvitoHtml>>;
@@ -322,16 +369,17 @@ export async function importAvitoListing(sourceUrl: string): Promise<AvitoImport
     fetched = await fetchAvitoHtml(normalizedUrl);
   } catch (error) {
     if (error instanceof ApiError && error.status < 500) throw error;
-    return importThroughReader(normalizedUrl, "Avito не ответил вовремя. Заполните данные вручную — ссылка уже сохранена в форме.");
+    return importThroughFallbacks(normalizedUrl, "Avito не ответил вовремя. Заполните данные вручную — ссылка уже сохранена в форме.");
   }
 
   const { response, html, currentUrl } = fetched;
-  if ([401, 403, 429].includes(response.status) || /captcha|доступ ограничен|подозрительн(?:ая|ую) активност/i.test(html)) {
-    return importThroughReader(currentUrl, "Avito ограничил автоматический доступ к странице. Заполните поля вручную.");
+  const pageTitle = html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "";
+  if ([401, 403, 429, 439].includes(response.status) || /доступ ограничен|проверка безопасности|подозрительн(?:ая|ую) активност|captcha/i.test(pageTitle)) {
+    return importThroughFallbacks(currentUrl, "Avito ограничил автоматический доступ к странице. Заполните поля вручную.");
   }
-  if (!response.ok) return importThroughReader(currentUrl, `Avito вернул статус ${response.status}. Проверьте ссылку и заполните поля вручную.`);
+  if (!response.ok) return importThroughFallbacks(currentUrl, `Avito вернул статус ${response.status}. Проверьте ссылку и заполните поля вручную.`);
   if (!response.headers.get("content-type")?.toLowerCase().includes("text/html")) {
-    return importThroughReader(currentUrl, "По ссылке получена не страница объявления. Заполните данные вручную.");
+    return importThroughFallbacks(currentUrl, "По ссылке получена не страница объявления. Заполните данные вручную.");
   }
 
   const metadata = readMetadata(html);
@@ -361,7 +409,7 @@ export async function importAvitoListing(sourceUrl: string): Promise<AvitoImport
     return [safeImageUrl(value)];
   }));
 
-  if (!title) return importThroughReader(currentUrl, "Avito открыл страницу, но не отдал название объявления. Заполните данные вручную.");
+  if (!title) return importThroughFallbacks(currentUrl, "Avito открыл страницу, но не отдал название объявления. Заполните данные вручную.");
 
   const directResult: AvitoImportResult = {
     mode: "automatic",
@@ -378,6 +426,8 @@ export async function importAvitoListing(sourceUrl: string): Promise<AvitoImport
   const needsEnrichment = !description || price === null || !city || imageUrls.length < 2;
   if (!needsEnrichment) return directResult;
 
+  const providerResult = await importThroughProvider(currentUrl);
+  if (providerResult) return mergeAutomaticResults(directResult, providerResult);
   const readerResult = await importThroughReader(
     currentUrl,
     "Часть данных Avito не удалось получить автоматически. Проверьте заполненные поля перед отправкой.",
