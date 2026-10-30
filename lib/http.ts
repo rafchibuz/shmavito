@@ -1,4 +1,5 @@
 import { ZodError } from "zod";
+import { siteOrigin } from "@/lib/site-origin";
 
 export class ApiError extends Error {
   constructor(
@@ -17,7 +18,7 @@ export function assertSameOrigin(request: Request) {
   if (fetchSite === "cross-site") {
     throw new ApiError(403, "INVALID_ORIGIN", "Запрос пришёл с недоверенного источника.");
   }
-  if (origin && origin !== new URL(request.url).origin) {
+  if (origin && origin !== siteOrigin(request)) {
     throw new ApiError(403, "INVALID_ORIGIN", "Запрос пришёл с недоверенного источника.");
   }
   if (!origin && process.env.NODE_ENV === "production") {

@@ -64,6 +64,7 @@ services:
       DATABASE_URL: postgresql://shmavito:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}@postgres:5432/shmavito?schema=public
       NODE_ENV: production
       TRUST_PROXY_HEADERS: "true"
+      APP_ORIGIN: ${APP_ORIGIN:-https://shmavito.ravshan.tv}
       PORT: "3000"
     ports:
       - "127.0.0.1:${LOCAL_HTTP_PORT:-8090}:3000"

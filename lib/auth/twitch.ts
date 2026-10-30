@@ -21,7 +21,7 @@ const tokenResponseSchema = z.object({
   access_token: z.string().min(1),
   expires_in: z.number().int().positive(),
   refresh_token: z.string(),
-  scope: z.array(z.string()),
+  scope: z.array(z.string()).default([]),
   token_type: z.string().min(1),
 });
 

@@ -21,6 +21,8 @@ or change the existing Compose projects.
    separate 32-byte random hex strings with `openssl rand -hex 32` for
    `POSTGRES_PASSWORD`, `AUTH_SECRET`, and `CRON_SECRET`. Enter the Twitch client
    ID and the newly rotated secret only on the server.
+   `APP_ORIGIN` must be the exact public HTTPS origin; the Compose file defaults
+   it to `https://shmavito.ravshan.tv` for this temporary domain.
 
 ## Start in a safe order
 

@@ -3,6 +3,7 @@ import { sessionCookieOptions } from "@/lib/auth/session";
 import { twitchConfig } from "@/lib/auth/twitch";
 import { apiErrorResponse } from "@/lib/http";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { safeReturnTo } from "@/lib/auth/return-to";
 
 const OAUTH_STATE_COOKIE = "shmavito_oauth_state";
 const RETURN_TO_COOKIE = "shmavito_return_to";
@@ -19,10 +20,7 @@ export async function GET(request: Request) {
     }
 
     const requestUrl = new URL(request.url);
-    const requestedReturnTo = requestUrl.searchParams.get("returnTo") || "/";
-    const returnTo = requestedReturnTo.startsWith("/") && !requestedReturnTo.startsWith("//")
-      ? requestedReturnTo
-      : "/";
+    const returnTo = safeReturnTo(requestUrl.searchParams.get("returnTo"));
     const state = crypto.randomUUID().replaceAll("-", "");
     const authorizeUrl = new URL("https://id.twitch.tv/oauth2/authorize");
     authorizeUrl.search = new URLSearchParams({
