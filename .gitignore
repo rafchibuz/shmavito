@@ -5,6 +5,7 @@ out/
 dist/
 .env
 .env.local
+.env.production
 .env.*.local
 !.env.example
 *.log
@@ -16,3 +17,4 @@ coverage/
 *.tsbuildinfo
 public/uploads/
 tmp/
+backups/

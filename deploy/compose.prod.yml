@@ -1,0 +1,127 @@
+name: shmavito
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: shmavito
+      POSTGRES_USER: shmavito
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shmavito -d shmavito"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 384m
+    security_opt: ["no-new-privileges:true"]
+    networks: [private]
+    logging: *logging
+
+  migrate:
+    image: shmavito-app:local
+    profiles: ["setup"]
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://shmavito:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}@postgres:5432/shmavito?schema=public
+    command: ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [private]
+    security_opt: ["no-new-privileges:true"]
+
+  seed:
+    image: shmavito-app:local
+    profiles: ["setup"]
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://shmavito:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}@postgres:5432/shmavito?schema=public
+    command: ["node", "prisma/seed.mjs"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [private]
+    security_opt: ["no-new-privileges:true"]
+
+  app:
+    image: shmavito-app:local
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env.production
+    environment:
+      DATABASE_URL: postgresql://shmavito:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}@postgres:5432/shmavito?schema=public
+      NODE_ENV: production
+      TRUST_PROXY_HEADERS: "true"
+      PORT: "3000"
+    ports:
+      - "127.0.0.1:${LOCAL_HTTP_PORT:-8090}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/categories').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 896m
+    pids_limit: 256
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [private]
+    logging: *logging
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: shmavito
+      PGDATABASE: shmavito
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}
+    volumes:
+      - ../backups:/backups
+      - ./backup.sh:/usr/local/bin/shmavito-backup.sh:ro
+    entrypoint: ["sh", "/usr/local/bin/shmavito-backup.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [private]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  availability-cron:
+    image: curlimages/curl:8.16.0
+    restart: unless-stopped
+    env_file:
+      - ../.env.production
+    volumes:
+      - ./availability-cron.sh:/usr/local/bin/availability-cron.sh:ro
+    entrypoint: ["sh", "/usr/local/bin/availability-cron.sh"]
+    depends_on:
+      app:
+        condition: service_healthy
+    networks: [private]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+networks:
+  private:
+    driver: bridge
+
+volumes:
+  postgres_data:
